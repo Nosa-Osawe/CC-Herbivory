@@ -1,7 +1,27 @@
+# Load libraries ----
+
 library(tidyverse)
+library(jsonlite)
 library(daymetr)
 
+# CC data ----
+options(timeout = 300)  
 
+api_url <- "https://api.github.com/repos/hurlbertlab/caterpillars-analysis-public/contents/data"
+files <- fromJSON(api_url)
+
+dataset_file <- files$name[grepl("fullDataset", files$name, ignore.case = TRUE)]
+
+# pick the latest one
+latest_file <- dataset_file[1]
+
+github_raw <- "https://raw.githubusercontent.com/hurlbertlab/caterpillars-analysis-public/master/data/"
+
+fullDataset <- read.csv(paste0(github_raw, latest_file))
+
+
+
+# proportion of herbivory per herb class----
 
 Herb1 = fullDataset %>% 
   filter(
@@ -46,6 +66,11 @@ Herb1 = fullDataset %>%
          H3.prop = Herb_3,
          H4.prop = Herb_4)
 
+
+
+# Herb score using the mean of the scale ----
+
+# here herbUsingMean is just using the mean/median of the herbivory scale to standardise the data
 
 herbUsingMean= fullDataset %>% 
   filter(
@@ -94,7 +119,7 @@ fullHerb = Herb1 %>%
   rename(nSurvHerb = nSurv)
 
 
-
+# Arthropod data: prop of surv per week----
 prop_fullDataset = fullDataset %>%
   filter( # potentially filter for (1) julian window and (2) sites
          WetLeaves == 0) %>% 
@@ -121,7 +146,7 @@ prop_fullDataset = fullDataset %>%
             nSurv = n_distinct(ID))  
 
 
-
+# Arthropod density: density per week----
 dens_fullDataset = fullDataset %>%
   filter( # potentially filter for (1) julian window and (2) sites
     WetLeaves == 0) %>% 
@@ -136,9 +161,6 @@ dens_fullDataset = fullDataset %>%
             grasshopper_density = sum(Group == "grasshopper", na.rm = TRUE)/nSurv,
             fly_density = sum(Group == "fly", na.rm = TRUE)/nSurv,
             daddylonglegs_density = sum(Group == "daddylonglegs", na.rm = TRUE)/nSurv) 
-
-
-
 
 
 
@@ -158,6 +180,7 @@ sum(is.na(prop.dens.arthropod)) # all good
  
 
 
+# Herbivory + Arthropod data
 Herb.Arthropod = fullHerb %>% select(-Latitude) %>% 
   left_join(prop.dens.arthropod, 
             by = c("Name", "Year", "julianweek"),
@@ -166,7 +189,17 @@ Herb.Arthropod = fullHerb %>% select(-Latitude) %>%
 
 
 
+
 # Calculate herbivory anomaly-----
+
+
+
+
+
+
+
+
+
 
 # Caterpillar density anomaly-----
 
@@ -193,71 +226,9 @@ Herb.Arthropod$nYearHerb
 #  Temperature data retrieval----
 
 
-# -- First, retrieve the good sites based on the those that are good for the actual phenometrics
-# 
+
+
+
  
-
-# Call the good sites GoodSiteYearLatLon, which  should have Name, Latitude, Longitude, and Year columns.
-
-
-tmp_file = tempfile(fileext = ".csv")
-
-GoodSiteYearLatLon %>%
-  rename(
-    site = Name,
-    lat = Latitude,
-    lon = Longitude
-  ) %>%
-  write.csv(tmp_file, row.names = FALSE)
-
-# pass temp CSV to function
-TempSiteData = download_daymet_batch(
-  file_location = tmp_file,
-  start = min(GoodSiteYear$Year),
-  end = 2024, # this is the most recent available in daymetr
-  internal = TRUE
-)
-
-# remove temporary file 
-unlink(tmp_file)
-
-# The TempSiteData is a list of list. check TempSiteData[[1]]$
-# so this function would extract the information and add the site information
-
-
-TempSiteData_clean <- lapply(TempSiteData, function(x) {
-  x$data %>% mutate(site = x$site,
-                    Latidue = x$latitude,
-                    Longitude = x$longitude)
-})
-
-AllTempData = bind_rows(TempSiteData_clean)
-
-
-
-## -- Combine centroids with Temperature----
-TempAnomalPhenoCentroid = AllTempData %>% 
-  filter(yday %in% TempDayWindow) %>% 
-  group_by(site, year) %>% 
-  summarise(meanTmin = mean(tmin..deg.c.),
-            meanTmax = mean(tmax..deg.c.),
-            meanPreci = mean(prcp..mm.day.)) %>% 
-  left_join(
-    AllTempData %>% 
-      filter(yday %in% TempDayWindow) %>% 
-      group_by(site) %>% 
-      summarise(AllmeanTmin = mean(tmin..deg.c.),
-                AllmeanTmax = mean(tmax..deg.c.),
-                AllmeanPreci = mean(prcp..mm.day.)),
-    by = c("site")) %>% 
-  mutate(AnomalTmin = meanTmin - AllmeanTmin,
-         AnomalTmax = meanTmax - AllmeanTmax,
-         AnomalPreci = meanPreci - AllmeanPreci)%>% 
-  right_join(anomalPhenoCentroid %>%  filter(Year != "2025"), # because daymetr has no 2025 yet.
-             by = c("site" = "Name", "year" = "Year")) %>% 
-  left_join(GoodSiteYearLatLon, by = c("site" = "Name")) %>% 
-  mutate(Group = factor(Group, levels =c("Caterpillar",
-                                         "Ant",
-                                         "Spider")))  
-
+ 
 
