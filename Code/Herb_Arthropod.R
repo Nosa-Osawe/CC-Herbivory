@@ -3,6 +3,9 @@
 library(tidyverse)
 library(jsonlite)
 library(daymetr)
+library(brms)
+library(bayesplot)
+
 
 # CC data ----
 options(timeout = 300)  
@@ -22,6 +25,11 @@ fullDataset <- read.csv(paste0(github_raw, latest_file))
 
 
 # proportion of herbivory per herb class----
+
+
+# convert ordinal leaf damage scores into a weighted estimate of tissue loss, 
+# aggregate them per site × week × year, and standardize by survey effort to obtain a continuous, 
+# effort-corrected herbivory intensity suitable for phenological modeling
 
 Herb1 = fullDataset %>% 
   filter(
@@ -103,7 +111,7 @@ herbUsingMean= fullDataset %>%
   group_by(Name, Latitude, Year, julianweek) %>% 
   summarise(nSurv = sum(nSurv),
             totalHerb = sum(totalHerb)) %>% 
-  mutate(Herb_standardized = totalHerb/nSurv) 
+  mutate(totalHerbS = totalHerb/nSurv) # totalHerbS is the standardized total heribory (to account for survey effort)
 
 herbUsingMean2= herbUsingMean%>% 
   left_join(
@@ -117,6 +125,7 @@ fullHerb = Herb1 %>%
   left_join(herbUsingMean2 %>% select(-nSurv),
                     by = c("Name", "Year", "julianweek")) %>% 
   rename(nSurvHerb = nSurv)
+
 
 
 # Arthropod data: prop of surv per week----
@@ -185,7 +194,7 @@ Herb.Arthropod = fullHerb %>% select(-Latitude) %>%
   left_join(prop.dens.arthropod, 
             by = c("Name", "Year", "julianweek"),
             relationship = "many-to-many") %>% # due to multiple observation methods in one site
-  data.frame() %>% rename(nYearHerb = nYear)
+  data.frame() %>% rename(nYearHerb = nYear) %>% filter(!is.na(ObservationMethod))
 
 
 
@@ -196,39 +205,186 @@ Herb.Arthropod = fullHerb %>% select(-Latitude) %>%
 
 
 
+julianWindow = 120:230
+min.nJulianWeekYearSite = 5
+min.nSurvWeekYearSite = 10
+min.nYear = 3
+
+
+
+# Two different data cleaning pipeline leads to sightly different outcome:
+
+# 1. Define a good JulianWeek
+# 2. Define good nSurv
+# 3. Define good survey years
+
+goodJulianWeek = Herb.Arthropod %>% 
+  filter(julianweek %in% julianWindow) %>% 
+  group_by(Name, ObservationMethod, Year) %>% 
+  summarise(nJulianWeek = n_distinct(julianweek)) %>% 
+  filter(nJulianWeek >= min.nJulianWeekYearSite)
+
+ 
+
+goodnSurv = fullDataset %>% 
+  right_join(goodJulianWeek, by = c("Name", "ObservationMethod", "Year")) %>% 
+  group_by(Name, ObservationMethod, Year, julianweek) %>% 
+  summarise(nSurv = n_distinct(ID)) %>% 
+  filter(nSurv >= min.nSurvWeekYearSite)
+
+
+
+goodnYear = Herb.Arthropod %>% 
+  right_join(goodnSurv, by = c("Name","ObservationMethod", "Year", "julianweek")) %>% 
+  group_by(Name, ObservationMethod) %>% 
+  summarise(nYear = n_distinct(Year)) %>% 
+  filter(nYear >= min.nYear) %>% 
+  filter(!is.na(ObservationMethod))
+
+
+goodHerbData = Herb.Arthropod %>% 
+  inner_join(goodJulianWeek, by = c("Name", "ObservationMethod", "Year")) %>% 
+  inner_join(goodnSurv, by = c("Name", "ObservationMethod", "Year", "julianweek")) %>% 
+  inner_join(goodnYear, by = c("Name", "ObservationMethod"))
+
+dim(goodHerbData)
+#------------------------------------------------------------------------------------------
+
+# A. Define what counts as herbivory (0-4). Already done in preparation of Herb.Arthropod dataframe
+# 1. Define a good nSurv
+# 2. Define a good JulianWindow
+# 3. Define a good nJulianWeek
+# 4. Define a good nYearHerb
+
+
+
+goodnSurv2 = fullDataset %>% 
+  right_join(Herb.Arthropod  %>% filter(julianweek %in% julianWindow),
+             by = c("Name",  "ObservationMethod", "Year", "julianweek")) %>% 
+  group_by(Name,  ObservationMethod, Year, julianweek) %>% 
+  summarise(nSurv = n_distinct(ID)) %>% 
+  filter(nSurv >= min.nSurvWeekYearSite) %>% data.frame()
+
+
+goodJulianWeek2 = Herb.Arthropod %>% 
+  right_join(goodnSurv2, by = c("Name", "ObservationMethod", "Year", "julianweek")) %>% 
+  group_by(Name, ObservationMethod, Year) %>% 
+  summarise(nJulianWeek = n_distinct(julianweek)) %>% 
+  filter(nJulianWeek >= min.nJulianWeekYearSite)
+
+
+
+goodnYear2 = Herb.Arthropod %>% 
+  right_join(goodJulianWeek2, by = c("Name", "ObservationMethod", "Year")) %>% 
+  group_by(Name, ObservationMethod) %>% 
+  summarise(nYearHerb = n_distinct(Year)) %>% 
+  filter(nYearHerb >= min.nYear)
+
+
+
+goodHerbData2 = Herb.Arthropod %>% 
+  inner_join(goodnYear2, by  = c("Name", "ObservationMethod")) %>% # keep good years
+  inner_join(goodJulianWeek2, by = c("Name", "ObservationMethod", "Year")) %>% # keep good weeks
+  inner_join(goodnSurv2, by = c("Name", "ObservationMethod", "Year", "julianweek")) # Keep good surveys
+
+dim(goodHerbData2)
+
+
+
+anti_join(goodHerbData, goodHerbData2, 
+          by = c("Name", "ObservationMethod", "Year", "julianweek")) %>% 
+  select(Name, ObservationMethod, Year, julianweek, nYearHerb)
+
+
+
+
+# herbivory centroid ----
+
+centroidHerbCat=  goodHerbData2 %>% 
+  mutate(siteObserv = paste0(Name, sep = "_", ObservationMethod)) %>% 
+  group_by(siteObserv, Year) %>% 
+  summarise(maxHerb = max(totalHerbS, na.rm = TRUE),
+            centroidweek = sum(julianweek * totalHerbS, na.rm = TRUE)/sum(totalHerb, na.rm = TRUE),
+            centroidHerb = sum(julianweek * totalHerbS, na.rm = TRUE)/ sum(julianweek, na.rm = TRUE),
+            maxH0.prop = max(H0.prop, na.rm = TRUE),
+            centroidH0 = sum(julianweek * H0.prop, na.rm = TRUE)/sum(H0.prop, na.rm = TRUE),
+            maxH1.prop = max(H1.prop, na.rm = TRUE),
+            centroidH1 = sum(julianweek * H1.prop, na.rm = TRUE)/sum(H1.prop, na.rm = TRUE),
+            maxH2.prop = max(H2.prop, na.rm = TRUE),
+            centroidH2 = sum(julianweek * H2.prop, na.rm = TRUE)/sum(H2.prop, na.rm = TRUE),
+            maxH3.prop = max(H3.prop, na.rm = TRUE),
+            centroidH3 = sum(julianweek * H3.prop, na.rm = TRUE)/sum(H3.prop, na.rm = TRUE),
+            maxH4.prop = max(H4.prop, na.rm = TRUE),
+            centroidH4 = sum(julianweek * H4.prop, na.rm = TRUE)/sum(H4.prop, na.rm = TRUE),
+            maxcaterpillar_prop = max(caterpillar_prop, na.rm = TRUE),
+            centroidcaterpillar_prop = sum(julianweek * caterpillar_prop, na.rm = TRUE)/sum(caterpillar_prop, na.rm = TRUE),
+            maxcaterpillar_density = max(caterpillar_density, na.rm = TRUE),
+            centroidcaterpillar_density = sum(julianweek * caterpillar_density, na.rm = TRUE)/sum(caterpillar_density, na.rm = TRUE)) %>% 
+  as.data.frame()
 
 
 
 
 
-# Caterpillar density anomaly-----
+
+centroidHerbCat %>% 
+  group_by(siteObserv) %>% 
+  summarise(mean.centroidHerb = mean(centroidHerb))
+#######################################################################################################
+
+# Fit linear regression models for each julian week  as predictor for total herbivory
+
+ggg_collapsed = goodHerbData2 %>% 
+  mutate(siteObserv = paste0(Name, sep = "_", ObservationMethod)) %>% 
+  select(siteObserv, Year, julianweek, totalHerbS) %>%
+  group_by(siteObserv, Year, julianweek) %>%
+  summarise(totalHerbS = mean(totalHerbS), .groups = "drop") # use mean here due to repeated record
+
+modelGoodHerb = ggg_collapsed %>% 
+  right_join(
+    ggg_collapsed %>% 
+      group_by(siteObserv, Year) %>% 
+      summarise(nJulianweek = n_distinct(julianweek)) %>% 
+      filter(nJulianweek >= min.nJulianWeekYearSite), 
+    by = c("siteObserv", "Year")
+  ) %>% 
+  as.data.frame() %>% 
+  mutate(
+    julianweek_C = scale(julianweek),
+    julianweek_N = (julianweek - min(julianweek)) / (max(julianweek) - min(julianweek))
+  )
 
 
 
-Herb.Arthropod %>% 
-  group_by(Name, ObservationMethod, Year, nYearArthropod) %>%
-  summarise(
-    maxOcc = max(caterpillar_density, na.rm = TRUE),
-    CentroidOccurrence = mean(caterpillar_density, na.rm = TRUE),
-    Centroid = sum(julianweek * caterpillar_density, na.rm = TRUE) / sum(caterpillar_density, na.rm = TRUE),
-    .groups = "drop"
-  ) %>% view()
+#####################################################################################
 
-Herb.Arthropod$nYearHerb 
+fit_herb_model =function(df) {
+  
+  mod <- lm(totalHerbS ~ julianweek_N, data = df)
+  sm  <- summary(mod)
+  
+  coef_ci <- confint(mod)
+  
+  tibble(
+    intercept = coef(mod)[1],
+    effect    = round(coef(mod)[2], 2),
+    r2        = round(sm$r.squared, 2),
+    intercept_lwr = coef_ci[1, 1],
+    intercept_upr = coef_ci[1, 2],
+    effect_lwr    = coef_ci[2, 1],
+    effect_upr    = coef_ci[2, 2]
+  )
+}
 
-# Caterpillar occurrence anomaly-----
 
+coef_table = modelGoodHerb %>%
+  group_by(siteObserv, Year) %>%
+  group_modify(~ fit_herb_model(.x)) %>% # passes each group's time series into the model
+  ungroup()
 
-
-
-
-
-#  Temperature data retrieval----
-
+#########################################################################################
 
 
 
 
  
- 
-

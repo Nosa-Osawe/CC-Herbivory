@@ -403,7 +403,7 @@ herbTotal= fullDataset %>%
   group_by(Name, Latitude, Year, julianweek) %>% 
   summarise(nSurv = sum(nSurv),
             totalHerb = sum(totalHerb)) %>% 
-  mutate(Herb_standardized = totalHerb/nSurv) %>% data.frame()
+  mutate(totalHerbS = totalHerb/nSurv) %>% data.frame()
   
   
 herbTotal2 = herbTotal %>%  
@@ -427,7 +427,7 @@ herbTotal2 %>%
     "Brookbanks Park"), 
     Year>2020, nSurv >= 6) %>% 
   ggplot(aes(x = julianweek, 
-             y = Herb_standardized, 
+             y = totalHerbS, 
              color = as.factor(Year))) +
   geom_point(alpha = 0.7) +
   stat_smooth(
@@ -453,7 +453,7 @@ herbTotal2 %>%
     nSurv >= 6,
   ) %>% 
   ggplot(aes(x = julianweek, 
-             y = Herb_standardized, 
+             y = totalHerbS, 
              color = as.factor(Year))) +
   geom_point(alpha = 0.7) +
   stat_smooth(
@@ -474,29 +474,6 @@ herbTotal2 = herbTotal2 %>%
   mutate(Name = reorder(Name, Latitude))
 
 
-herbTotal2 %>% 
-  filter( 
-    nYear >= 4,
-    Year >= 2020, 
-    nSurv >= 10
-  ) %>% 
-  ggplot(aes(x = julianweek, 
-             y = Herb_standardized, 
-             color = as.factor(Year))) +
-  geom_point(alpha = 0.7) +
-  stat_smooth(
-    aes(fill = as.factor(Year)),
-    method = "gam",
-    formula = y ~ s(x, k = 5),
-    se = TRUE,
-    alpha = 0.15
-  ) +
-  scale_color_manual(values = c( "purple", "#E69F00", "#56B4E9", "#009E73", "red", "black")) +
-  scale_fill_manual(values = c("purple", "#E69F00", "#56B4E9", "#009E73", "red", "black")) +
-  facet_wrap(~ Name, ncol = 5, scales = "free_y") +
-  theme_bw() +
-  labs(color = "Year", fill = "Year", y = "total herbivory")
-
 
 
 herbTotal2 %>% 
@@ -509,7 +486,7 @@ herbTotal2 %>%
     Name = factor(Name, levels = unique(Name[order(-Latitude)]))
   ) %>% 
   ggplot(aes(x = julianweek, 
-             y = Herb_standardized, 
+             y = totalHerbS, 
              color = as.factor(Year))) +
   geom_point(alpha = 0.7) +
   stat_smooth(
@@ -524,3 +501,46 @@ herbTotal2 %>%
   facet_wrap(~ Name, ncol = 5, scales = "free_y") +
   theme_bw() +
   labs(color = "Year", fill = "Year", y = "total herbivory")
+
+
+
+
+herbTotal2 %>% 
+  filter(
+    nYear >= 4,
+    Year >= 2020, 
+    nSurv >= 10
+  ) %>% 
+  mutate(
+    Name = factor(Name, levels = unique(Name[order(-Latitude)]))
+  ) %>% 
+  ggplot(aes(x = julianweek, 
+             y = totalHerbS, 
+             color = as.factor(Year))) +
+  geom_rect(
+    inherit.aes = FALSE,
+    aes(
+      xmin = 120,
+      xmax = 230,
+      ymin = -Inf,
+      ymax = Inf
+    ),
+    fill = "grey95",
+    alpha = 0.1
+  ) +
+  
+  geom_point(alpha = 0.7) +
+  stat_smooth(
+    aes(fill = as.factor(Year)),
+    method = "gam",
+    formula = y ~ s(x, k = 5),
+    se = TRUE,
+    alpha = 0.15
+  ) +
+  scale_color_manual(values = c("purple", "#E69F00", "#56B4E9", "#009E73", "red", "black")) +
+  scale_fill_manual(values = c("purple", "#E69F00", "#56B4E9", "#009E73", "red", "black")) +
+  facet_wrap(~ Name, ncol = 5, scales = "free_y") +
+  theme_bw() +
+  labs(color = "Year", fill = "Year", y = "total herbivory",
+       subtitle = "nYear >=4, nSurvPerWeek >=10, survery window: 120-230 (in grey)")
+
