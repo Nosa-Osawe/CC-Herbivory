@@ -3,8 +3,7 @@
 library(tidyverse)
 library(jsonlite)
 library(daymetr)
-library(brms)
-library(bayesplot)
+
 
 
 # CC data ----
@@ -297,55 +296,23 @@ anti_join(goodHerbData, goodHerbData2,
 
 
 
-
-# herbivory centroid ----
-
-centroidHerbCat=  goodHerbData2 %>% 
-  mutate(siteObserv = paste0(Name, sep = "_", ObservationMethod)) %>% 
-  group_by(siteObserv, Year) %>% 
-  summarise(maxHerb = max(totalHerbS, na.rm = TRUE),
-            centroidweek = sum(julianweek * totalHerbS, na.rm = TRUE)/sum(totalHerb, na.rm = TRUE),
-            centroidHerb = sum(julianweek * totalHerbS, na.rm = TRUE)/ sum(julianweek, na.rm = TRUE),
-            maxH0.prop = max(H0.prop, na.rm = TRUE),
-            centroidH0 = sum(julianweek * H0.prop, na.rm = TRUE)/sum(H0.prop, na.rm = TRUE),
-            maxH1.prop = max(H1.prop, na.rm = TRUE),
-            centroidH1 = sum(julianweek * H1.prop, na.rm = TRUE)/sum(H1.prop, na.rm = TRUE),
-            maxH2.prop = max(H2.prop, na.rm = TRUE),
-            centroidH2 = sum(julianweek * H2.prop, na.rm = TRUE)/sum(H2.prop, na.rm = TRUE),
-            maxH3.prop = max(H3.prop, na.rm = TRUE),
-            centroidH3 = sum(julianweek * H3.prop, na.rm = TRUE)/sum(H3.prop, na.rm = TRUE),
-            maxH4.prop = max(H4.prop, na.rm = TRUE),
-            centroidH4 = sum(julianweek * H4.prop, na.rm = TRUE)/sum(H4.prop, na.rm = TRUE),
-            maxcaterpillar_prop = max(caterpillar_prop, na.rm = TRUE),
-            centroidcaterpillar_prop = sum(julianweek * caterpillar_prop, na.rm = TRUE)/sum(caterpillar_prop, na.rm = TRUE),
-            maxcaterpillar_density = max(caterpillar_density, na.rm = TRUE),
-            centroidcaterpillar_density = sum(julianweek * caterpillar_density, na.rm = TRUE)/sum(caterpillar_density, na.rm = TRUE)) %>% 
-  as.data.frame()
-
-
-
-
-
-
-centroidHerbCat %>% 
-  group_by(siteObserv) %>% 
-  summarise(mean.centroidHerb = mean(centroidHerb))
+  
 #######################################################################################################
 
 # Fit linear regression models for each julian week  as predictor for total herbivory
 
-ggg_collapsed = goodHerbData2 %>% 
+goodHerbData2_collapsed = goodHerbData2 %>% 
   mutate(siteObserv = paste0(Name, sep = "_", ObservationMethod)) %>% 
   select(siteObserv, Year, julianweek, totalHerbS) %>%
   group_by(siteObserv, Year, julianweek) %>%
   summarise(totalHerbS = mean(totalHerbS), .groups = "drop") # use mean here due to repeated record
 
-modelGoodHerb = ggg_collapsed %>% 
+modelGoodHerb = goodHerbData2_collapsed %>% 
   right_join(
-    ggg_collapsed %>% 
+    goodHerbData2_collapsed %>% 
       group_by(siteObserv, Year) %>% 
       summarise(nJulianweek = n_distinct(julianweek)) %>% 
-      filter(nJulianweek >= min.nJulianWeekYearSite), 
+      filter(nJulianweek >= min.nJulianWeekYearSite), # This may not be necessary anymore
     by = c("siteObserv", "Year")
   ) %>% 
   as.data.frame() %>% 
@@ -357,6 +324,7 @@ modelGoodHerb = ggg_collapsed %>%
 
 
 #####################################################################################
+
 
 fit_herb_model =function(df) {
   
@@ -377,14 +345,96 @@ fit_herb_model =function(df) {
 }
 
 
-coef_table = modelGoodHerb %>%
+herbModelOutput = modelGoodHerb %>%
   group_by(siteObserv, Year) %>%
   group_modify(~ fit_herb_model(.x)) %>% # passes each group's time series into the model
   ungroup()
+
+
+herbModelOutput.Lat = herbModelOutput %>% 
+  separate(siteObserv, into = c("Name", "ObservationMethod"), sep = "_") %>% 
+  left_join(fullDataset %>% select(Name, Latitude, Longitude) %>% 
+              group_by(Name) %>% 
+              summarise(Latitude = mean(Latitude),
+                        Longitude = mean(Longitude)),
+            by = c("Name"))
 
 #########################################################################################
 
 
 
+# Herbivory + caterpillar Anomaly ----
 
- 
+centroidHerbCat=  goodHerbData2 %>% 
+  mutate(siteObserv = paste0(Name, sep = "_", ObservationMethod)) %>% 
+  group_by(siteObserv, Year) %>% 
+  summarise(maxHerb = max(totalHerbS, na.rm = TRUE),
+            centroidweek = sum(julianweek * totalHerbS, na.rm = TRUE)/sum(totalHerbS, na.rm = TRUE),
+            maxH0.prop = max(H0.prop, na.rm = TRUE),
+            centroidH0 = sum(julianweek * H0.prop, na.rm = TRUE)/sum(H0.prop, na.rm = TRUE),
+            maxH1.prop = max(H1.prop, na.rm = TRUE),
+            centroidH1 = sum(julianweek * H1.prop, na.rm = TRUE)/sum(H1.prop, na.rm = TRUE),
+            maxH2.prop = max(H2.prop, na.rm = TRUE),
+            centroidH2 = sum(julianweek * H2.prop, na.rm = TRUE)/sum(H2.prop, na.rm = TRUE),
+            maxH3.prop = max(H3.prop, na.rm = TRUE),
+            centroidH3 = sum(julianweek * H3.prop, na.rm = TRUE)/sum(H3.prop, na.rm = TRUE),
+            maxH4.prop = max(H4.prop, na.rm = TRUE),
+            centroidH4 = sum(julianweek * H4.prop, na.rm = TRUE)/sum(H4.prop, na.rm = TRUE),
+            maxcaterpillar_prop = max(caterpillar_prop, na.rm = TRUE),
+            centroidcaterpillar_prop = sum(julianweek * caterpillar_prop, na.rm = TRUE)/sum(caterpillar_prop, na.rm = TRUE),
+            maxcaterpillar_density = max(caterpillar_density, na.rm = TRUE),
+            centroidcaterpillar_density = sum(julianweek * caterpillar_density, na.rm = TRUE)/sum(caterpillar_density, na.rm = TRUE)) %>% 
+  as.data.frame()
+
+
+HerbCatAnomaly = centroidHerbCat %>% 
+  left_join(
+    centroidHerbCat %>% 
+      group_by(siteObserv) %>% 
+      summarise(
+        mean.maxHerb = mean(maxHerb, na.rm = TRUE),
+        mean.centroidweek = mean(centroidweek, na.rm = TRUE),
+        mean.maxH0.prop = mean(maxH0.prop, na.rm = TRUE),
+        mean.centroidH0 = mean(centroidH0, na.rm = TRUE),
+        mean.maxH1.prop = mean(maxH1.prop, na.rm = TRUE),
+        mean.centroidH1 = mean(centroidH1, na.rm = TRUE),
+        mean.maxH2.prop = mean(maxH2.prop, na.rm = TRUE),
+        mean.centroidH2 = mean(centroidH2, na.rm = TRUE),
+        mean.maxH3.prop = mean(maxH3.prop, na.rm = TRUE),
+        mean.centroidH3 = mean(centroidH3, na.rm = TRUE),
+        mean.maxH4.prop = mean(maxH4.prop, na.rm = TRUE),
+        mean.centroidH4 = mean(centroidH4, na.rm = TRUE),
+        mean.maxcaterpillar_prop = mean(maxcaterpillar_prop, na.rm = TRUE),
+        mean.centroidcaterpillar_prop = mean(centroidcaterpillar_prop, na.rm = TRUE),
+        mean.maxcaterpillar_density = mean(maxcaterpillar_density, na.rm = TRUE),
+        mean.centroidcaterpillar_density = mean(centroidcaterpillar_density, na.rm = TRUE)
+      ),
+    by = c("siteObserv")
+  ) %>% 
+  mutate(
+    maxHerbAnomaly = maxHerb - mean.maxHerb,
+    centroidweekAnomaly = centroidweek - mean.centroidweek,
+    maxH0.propAnomaly = maxH0.prop - mean.maxH0.prop,
+    centroidH0Anomaly = centroidH0 - mean.centroidH0,
+    maxH1.propAnomaly = maxH1.prop - mean.maxH1.prop,
+    centroidH1Anomaly = centroidH1 - mean.centroidH1,
+    maxH2.propAnomaly = maxH2.prop - mean.maxH2.prop,
+    centroidH2Anomaly = centroidH2 - mean.centroidH2,
+    maxH3.propAnomaly = maxH3.prop - mean.maxH3.prop,
+    centroidH3Anomaly = centroidH3 - mean.centroidH3,
+    maxH4.propAnomaly = maxH4.prop - mean.maxH4.prop,
+    centroidH4Anomaly = centroidH4 - mean.centroidH4,
+    maxcaterpillar_propAnomaly = maxcaterpillar_prop - mean.maxcaterpillar_prop,
+    centroidcaterpillar_propAnomaly = centroidcaterpillar_prop - mean.centroidcaterpillar_prop,
+    maxcaterpillar_densityAnomaly = maxcaterpillar_density - mean.maxcaterpillar_density,
+    centroidcaterpillar_densityAnomaly = centroidcaterpillar_density - mean.centroidcaterpillar_density
+  ) %>% as.data.frame()
+
+
+HerbCatAnomaly_herbModel = left_join(HerbCatAnomaly,
+                                     herbModelOutput, 
+                                     by = c("siteObserv", "Year")) %>% data.frame()
+
+
+
+
