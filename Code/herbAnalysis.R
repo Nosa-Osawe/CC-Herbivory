@@ -10,6 +10,8 @@ library(nlme)
 library(performance)
 library(DescTools)
 library(ineq)
+library(jtools)
+library(corrplot)
 
 # CC data ----
 options(timeout = 300)  
@@ -211,7 +213,7 @@ julianWindow = 120:230 # tweak this
 min.nJulianWeekYearSite = 5
 min.nSurvWeekYearSite = 20
 min.nYear = 1
-
+TempDayWindow = 120: 230
 #------------------------------------------------------------------------------------------
 
 # A. Define what counts as herbivory (0-4). Already done in preparation of Herb.Arthropod dataframe
@@ -360,21 +362,133 @@ r2(fit_lme_wt)
 
 
 
-############################################################################################################################
+
+
+
+herbModelOutput.Lat
+
+
+
+
+# -- First, retrieve the good sites based on the those that are good for the actual phenometrics
+
+
+tmp_file = tempfile(fileext = ".csv")
+
+HerbSites = herbModelOutput.Lat[, c("Name","Year", "Latitude", "Longitude")] %>% 
+  filter(Longitude >= -100) %>% 
+  group_by(Name, Latitude, Longitude) %>% 
+  summarise(n = n()) %>% 
+  select(-n) %>% as.data.frame()   
+
+HerbSitesDaymetr = HerbSites %>% 
+  rename(
+    site = Name,
+    lat = Latitude,
+    lon = Longitude
+  ) %>%
+  write.csv(tmp_file, row.names = FALSE)
+
+
+# pass temp CSV to function
+TempSiteData = download_daymet_batch(
+  file_location = tmp_file,
+  start = min(herbModelOutput.Lat$Year),
+  end = 2024, # this is the most recent available in daymetr
+  internal = TRUE
+)
+
+# remove temporary file 
+unlink(tmp_file)
+
+
+TempSiteData_clean <- lapply(TempSiteData, function(x) {
+  x$data %>% mutate(site = x$site,
+                    Latidue = x$latitude,
+                    Longitude = x$longitude)
+})
+
+AllTempData = bind_rows(TempSiteData_clean)
+
+
+
+HerbTemp = AllTempData %>% 
+  filter(yday %in% TempDayWindow) %>% 
+  group_by(site, year) %>% 
+  summarise(meanTmin = mean(tmin..deg.c.),
+            meanTmax = mean(tmax..deg.c.),
+            meanPreci = mean(prcp..mm.day.)) %>% 
+  left_join(
+    AllTempData %>% 
+      filter(yday %in% TempDayWindow) %>% 
+      group_by(site) %>% 
+      summarise(AllmeanTmin = mean(tmin..deg.c.),
+                AllmeanTmax = mean(tmax..deg.c.),
+                AllmeanPreci = mean(prcp..mm.day.)),
+    by = c("site")) %>% 
+  mutate(AnomalTmin = meanTmin - AllmeanTmin,
+         AnomalTmax = meanTmax - AllmeanTmax,
+         AnomalPreci = meanPreci - AllmeanPreci)%>% 
+  inner_join(herbModelOutput.Lat %>%  filter(Year != "2025"), # because daymetr has no 2025 yet.
+             by = c("site" = "Name", "year" = "Year")) %>% data.frame()
  
 
-gini_asymmetry <- function(x) {
-  
-  x <- x[!is.na(x)]
-  
-  x <- x / sum(x)
-  
-  median_x <- median(x)
-  GAI <- sum((x - median_x) * abs(x - median_x)) / sum(abs(x - median_x))
-  
-  return(GAI)
-}
+HerbTemp_W = HerbTemp %>% # This is the dataframe I would be working with to find the best predictor for "effect"
+  select(
+    siteObserv,  Longitude, year, 
+    r2, intercept, effect, 
+    Latitude, meanTmin, meanTmax, meanPreci,
+    AnomalTmin, AnomalTmax, AnomalPreci 
+    )
 
+summary(HerbTemp_W)
+
+# Remove siteObserv and keep only numeric variables
+corrplot(cor(HerbTemp_W %>%
+  select(-siteObserv) %>%        
+  select(where(is.numeric)),     
+  use = "pairwise.complete.obs"),  
+method = "color", 
+type = "upper",          
+addCoef.col = "black",    
+tl.col = "black",         
+tl.srt = 45,              
+diag = FALSE)    
+ 
+
+
+fit_temp<- lme(
+  fixed = effect ~ meanTmin ,
+  random = ~ 1 | siteObserv,
+  weights = ~ (r2+ 0.001),  
+  data = HerbTemp_W,
+  method = "REML"
+)
+summary(fit_temp)
+r2(fit_temp)
+
+
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+############################################################################################################################
+  
 
 goodHerbData2.gini =  goodHerbData2 %>%
   mutate(H_totalProp = rowSums(select(., H1.prop:H4.prop), na.rm = TRUE))
@@ -386,17 +500,146 @@ goodHerbData2.gini %>%
   filter(hSum >1.001 | hSum < 0.999) # good!
 
 
-herbGini = goodHerbData2.gini %>% 
-  group_by(Name, ObservationMethod, Year, julianweek) %>% 
-  summarise(Gini.index = Gini(H_totalProp),
-            LAC = Lasym(H_totalProp))
-
-summary(herbGini)
 
  
+ 
+herbGini = goodHerbData2.gini %>% 
+  dplyr::select(Name, Latitude, ObservationMethod, Year, julianweek, Herb, H_totalProp) %>% 
+  mutate(
+    Herb_level = case_when(
+      Herb == '0' ~ "H0",
+      Herb == '1' ~ "H3",
+      Herb == '2' ~ "H7",
+      Herb == '3' ~ "H17",
+      Herb == '4' ~ "H62"
+    )
+  ) %>% 
+  pivot_wider(
+    names_from = Herb_level,
+    values_from = H_totalProp
+  )%>% 
+  mutate(
+    across(
+      .cols = c(H0, H3, H7, H17, H62),
+      .fns  = ~ tidyr::replace_na(.x, 0)
+    )
+  ) %>%
+  dplyr::select(-Herb) %>% 
+  pivot_longer(
+    cols = -c(Name, Latitude, ObservationMethod, Year, julianweek),
+    names_to = "HerbClass",
+    values_to = "Prop"
+  ) %>% 
+  group_by(Name, Latitude, ObservationMethod, Year, julianweek, HerbClass) %>% 
+  summarise(Prop = sum(Prop)) %>% as.data.frame() %>% 
+  mutate(HerbClassNum = as.integer(sub("H", "", HerbClass))) %>% 
+  mutate(HerbClassNum = HerbClassNum / max(HerbClassNum)) %>%  # just to re-scale it, so 1 is the highest.
+  group_by(Name, Latitude, ObservationMethod, Year, julianweek) %>% 
+  summarise(
+    Gini.index = DescTools::Gini(Prop),
+    LAC = Lasym(Prop),
+    Gini.index2 = DescTools::Gini(
+      x = HerbClassNum,
+      weights = round(100 * Prop) # will produce NaNs if only one weight is present and others are 0. 
+    ), # This is same as a gini index of 1, so, to solve the NaN problem,
+    .groups = "drop" #  I will replace all NaNs by 0.99 (so it can be ilogit transformed)
+  ) %>% 
+  as.data.frame() %>% 
+  mutate(Gini.index2 = ifelse(is.nan(Gini.index2), 0.99, Gini.index2)) %>% 
+  mutate(truncGini = ifelse((Gini.index > 0.99), 0.99, Gini.index)) %>% 
+  mutate(ilogitGini.index = qlogis(truncGini),
+         ilogitGini.index2 = qlogis(Gini.index2)) %>% # we compute an ilogit from 1
+  mutate(siteObserv = paste0(Name, sep = "_", ObservationMethod ))
+
+summary(herbGini)
+ 
+ 
+
+fit_ilogitGini1 =  lme(
+  fixed = ilogitGini.index ~ Latitude,
+  random = ~ 1 | siteObserv/Year,
+  data = herbGini,
+  method = "REML"
+)
+
+summary(fit_ilogitGini1)
+r2(fit_ilogitGini1)
+
+beta_fit_ilogitGini1 <- fixef(fit_ilogitGini1)
+
+ggplot(herbGini, aes(x = Latitude, y = ilogitGini.index)) +
+  geom_point(alpha = 0.3, size = 3) +
+  geom_abline(
+    intercept = beta_fit_ilogitGini1["(Intercept)"],
+    slope = beta_fit_ilogitGini1["Latitude"],
+    linewidth = 1.2,
+    color = "red"
+  ) +
+  theme_classic() +
+  labs(
+    x = "Latitude",
+    y = "ilogit Gini",
+    title = "Variation in Herbivory (level) increases with latitude",
+    subtitle = "Marginal R2: 0.044"
+  )
 
 
 
 
 
+
+
+fit_ilogitGini2 =  lme(
+  fixed = ilogitGini.index2 ~ Latitude,
+  random = ~ 1 | siteObserv/Year,
+  data = herbGini,
+  method = "REML"
+)
+
+summary(fit_ilogitGini2)
+r2(fit_ilogitGini2)
+
+beta_fit_ilogitGini2 <- fixef(fit_ilogitGini2)
+
+ggplot(herbGini, aes(x = Latitude, y = ilogitGini.index2)) +
+  geom_point(alpha = 0.3, size = 3) +
+  geom_abline(
+    intercept = beta_fit_ilogitGini2["(Intercept)"],
+    slope = beta_fit_ilogitGini2["Latitude"],
+    linewidth = 1.2,
+    color = "red"
+  ) +
+  theme_classic() +
+  labs(
+    x = "Latitude",
+    y = "ilogit Gini",
+    title = "  increases with latitude",
+    subtitle = "Marginal R2: 0.037"
+  )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Julian week as predictor of gini variation in herbiivory
+
+
+fit_giniWeek =   lme(
+  fixed = ilogitGini.index ~ julianweek + Latitude,
+  random = ~ 1 | siteObserv,
+  data = herbGini2,
+  method = "REML"
+)
+
+summary(fit_giniWeek)
+r2(fit_giniWeek)
 
