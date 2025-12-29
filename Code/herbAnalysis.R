@@ -469,177 +469,34 @@ r2(fit_temp)
 
 
  
+## Anomaly on rate of herbivory increase 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-############################################################################################################################
-  
-
-goodHerbData2.gini =  goodHerbData2 %>%
-  mutate(H_totalProp = rowSums(select(., H1.prop:H4.prop), na.rm = TRUE))
-
-# health check
-goodHerbData2.gini %>% 
-  group_by(Name, ObservationMethod, Year, julianweek) %>% 
-  summarise(hSum = sum(H_totalProp)) %>% 
-  filter(hSum >1.001 | hSum < 0.999) # good!
-
-
-
+HerbRateAnomaly = herbModelOutput.Lat %>% 
+  group_by(siteObserv) %>% 
+  summarise(meanEffect = mean(effect, na.rm = TRUE),
+            meanIntercept = mean(intercept, na.rm = TRUE),
+            meanR2 = mean(r2, na.rm = TRUE)) %>% data.frame() %>% 
+  right_join(herbModelOutput.Lat, by = "siteObserv") %>% 
+  mutate(effectAnomal = effect - meanEffect,
+         interceptAnomal = intercept - meanIntercept,
+         r2Anomal = r2 - meanR2) %>% as.data.frame() %>% 
+  select(-c(intercept, Name, ObservationMethod, intercept, effect, r2, 
+            intercept_lwr, intercept_upr, effect_lwr, effect_upr, Latitude, Longitude)) %>% 
+  inner_join(
+  HerbTemp %>% select(- c( intercept_lwr, intercept_upr, effect_lwr, effect_upr)), 
+  by = c("siteObserv", "Year" = "year")) %>% as.data.frame()
  
- 
-herbGini = goodHerbData2.gini %>% 
-  dplyr::select(Name, Latitude, ObservationMethod, Year, julianweek, Herb, H_totalProp) %>% 
-  mutate(
-    Herb_level = case_when(
-      Herb == '0' ~ "H0",
-      Herb == '1' ~ "H3",
-      Herb == '2' ~ "H7",
-      Herb == '3' ~ "H17",
-      Herb == '4' ~ "H62"
-    )
-  ) %>% 
-  pivot_wider(
-    names_from = Herb_level,
-    values_from = H_totalProp
-  )%>% 
-  mutate(
-    across(
-      .cols = c(H0, H3, H7, H17, H62),
-      .fns  = ~ tidyr::replace_na(.x, 0)
-    )
-  ) %>%
-  dplyr::select(-Herb) %>% 
-  pivot_longer(
-    cols = -c(Name, Latitude, ObservationMethod, Year, julianweek),
-    names_to = "HerbClass",
-    values_to = "Prop"
-  ) %>% 
-  group_by(Name, Latitude, ObservationMethod, Year, julianweek, HerbClass) %>% 
-  summarise(Prop = sum(Prop)) %>% as.data.frame() %>% 
-  mutate(HerbClassNum = as.integer(sub("H", "", HerbClass))) %>% 
-  mutate(HerbClassNum = HerbClassNum / max(HerbClassNum)) %>%  # just to re-scale it, so 1 is the highest.
-  group_by(Name, Latitude, ObservationMethod, Year, julianweek) %>% 
-  summarise(
-    Gini.index = DescTools::Gini(Prop),
-    LAC = Lasym(Prop),
-    Gini.index2 = DescTools::Gini(
-      x = HerbClassNum,
-      weights = round(100 * Prop) # will produce NaNs if only one weight is present and others are 0. 
-    ), # This is same as a gini index of 1, so, to solve the NaN problem,
-    .groups = "drop" #  I will replace all NaNs by 0.99 (so it can be ilogit transformed)
-  ) %>% 
-  as.data.frame() %>% 
-  mutate(Gini.index2 = ifelse(is.nan(Gini.index2), 0.99, Gini.index2)) %>% 
-  mutate(truncGini = ifelse((Gini.index > 0.99), 0.99, Gini.index)) %>% 
-  mutate(ilogitGini.index = qlogis(truncGini),
-         ilogitGini.index2 = qlogis(Gini.index2)) %>% # we compute an ilogit from 1
-  mutate(siteObserv = paste0(Name, sep = "_", ObservationMethod ))
+ggplot(HerbRateAnomaly, aes(x = AnomalTmin, y = effectAnomal))+
+  geom_point()
 
-summary(herbGini)
- 
- 
-
-fit_ilogitGini1 =  lme(
-  fixed = ilogitGini.index ~ Latitude,
-  random = ~ 1 | siteObserv/Year,
-  data = herbGini,
-  method = "REML"
-)
-
-summary(fit_ilogitGini1)
-r2(fit_ilogitGini1)
-
-beta_fit_ilogitGini1 <- fixef(fit_ilogitGini1)
-
-ggplot(herbGini, aes(x = Latitude, y = ilogitGini.index)) +
-  geom_point(alpha = 0.3, size = 3) +
-  geom_abline(
-    intercept = beta_fit_ilogitGini1["(Intercept)"],
-    slope = beta_fit_ilogitGini1["Latitude"],
-    linewidth = 1.2,
-    color = "red"
-  ) +
-  theme_classic() +
-  labs(
-    x = "Latitude",
-    y = "ilogit Gini",
-    title = "Variation in Herbivory (level) increases with latitude",
-    subtitle = "Marginal R2: 0.044"
-  )
+wh
 
 
+ggplot(HerbRateAnomaly, aes(x = AnomalTmin, y = r2Anomal))+
+  geom_point()+
+  stat_smooth(method = "lm")
 
-
-
-
-
-fit_ilogitGini2 =  lme(
-  fixed = ilogitGini.index2 ~ Latitude,
-  random = ~ 1 | siteObserv/Year,
-  data = herbGini,
-  method = "REML"
-)
-
-summary(fit_ilogitGini2)
-r2(fit_ilogitGini2)
-
-beta_fit_ilogitGini2 <- fixef(fit_ilogitGini2)
-
-ggplot(herbGini, aes(x = Latitude, y = ilogitGini.index2)) +
-  geom_point(alpha = 0.3, size = 3) +
-  geom_abline(
-    intercept = beta_fit_ilogitGini2["(Intercept)"],
-    slope = beta_fit_ilogitGini2["Latitude"],
-    linewidth = 1.2,
-    color = "red"
-  ) +
-  theme_classic() +
-  labs(
-    x = "Latitude",
-    y = "ilogit Gini",
-    title = "  increases with latitude",
-    subtitle = "Marginal R2: 0.037"
-  )
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# Julian week as predictor of gini variation in herbiivory
-
-
-fit_giniWeek =   lme(
-  fixed = ilogitGini.index ~ julianweek + Latitude,
-  random = ~ 1 | siteObserv,
-  data = herbGini2,
-  method = "REML"
-)
-
-summary(fit_giniWeek)
-r2(fit_giniWeek)
-
+ggplot(HerbRateAnomaly, aes(x = AnomalTmax, y = r2Anomal))+
+  geom_point()+
+  stat_smooth(method = "lm")
