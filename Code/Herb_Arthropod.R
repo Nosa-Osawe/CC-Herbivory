@@ -205,10 +205,10 @@ Herb.Arthropod = fullHerb %>% select(-Latitude) %>%
 
 
 julianWindow = 120:230
-min.nJulianWeekYearSite = 5
-min.nSurvWeekYearSite = 10
+min.nJulianWeekYearSite = 6
+min.nSurvWeekYearSite = 20
 min.nYear = 3
-
+TempDayWindow = 120: 230
 
 
 # Two different data cleaning pipeline leads to sightly different outcome:
@@ -337,10 +337,6 @@ fit_herb_model =function(df) {
     intercept = coef(mod)[1],
     effect    = round(coef(mod)[2], 2),
     r2        = round(sm$r.squared, 2),
-    intercept_lwr = coef_ci[1, 1],
-    intercept_upr = coef_ci[1, 2],
-    effect_lwr    = coef_ci[2, 1],
-    effect_upr    = coef_ci[2, 2]
   )
 }
 
@@ -434,6 +430,300 @@ HerbCatAnomaly = centroidHerbCat %>%
 HerbCatAnomaly_herbModel = left_join(HerbCatAnomaly,
                                      herbModelOutput, 
                                      by = c("siteObserv", "Year")) %>% data.frame()
+
+
+
+###################################################################################################
+
+
+## Correlate important variables----
+corrplot(cor(HerbCatAnomaly_herbModel %>%
+               select(maxHerb, maxH0.prop, maxH2.prop, maxH3.prop, maxH4.prop, effect, intercept, r2, centroidweek,
+                      centroidcaterpillar_density, centroidcaterpillar_prop, maxcaterpillar_density, maxcaterpillar_prop,
+                      centroidweekAnomaly, centroidcaterpillar_propAnomaly)%>%
+               mutate(across(everything(), ~ifelse(is.infinite(.), NA, .))),
+             use = "pairwise.complete.obs"),  
+         method = "color", 
+         type = "upper",          
+         addCoef.col = "black",    
+         tl.col = "black",         
+         tl.srt = 45,              
+         diag = FALSE)  
+
+
+ggplot(data = HerbCatAnomaly_herbModel,
+       aes(x= maxcaterpillar_prop, y = maxHerb)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = TRUE, color = "red") +
+  stat_poly_eq(
+    aes(label = paste(..eq.label.., ..rr.label.., sep = "~~~")),
+    formula = y ~ x,
+    parse = TRUE
+  )
+
+
+ggplot(data = HerbCatAnomaly_herbModel,
+       aes(x= centroidcaterpillar_density, y = maxHerb)) + geom_point()+
+  geom_smooth(method = "lm", se = TRUE, color = "red") +
+  stat_poly_eq(
+    formula = y ~ x,
+    aes(label = paste(
+      after_stat(eq.label),
+      after_stat(rr.label),
+      after_stat(p.value.label),
+      sep = "~~~"
+    )),
+    parse = TRUE
+  )
+
+
+
+ggplot(data = HerbCatAnomaly_herbModel,
+       aes(x= centroidcaterpillar_prop, y = maxHerb)) + geom_point()+
+  geom_smooth(method = "lm", se = TRUE, color = "red") +
+  stat_poly_eq(
+    formula = y ~ x,
+    aes(label = paste(
+      after_stat(eq.label),
+      after_stat(rr.label),
+      after_stat(p.value.label),
+      sep = "~~~"
+    )),
+    parse = TRUE
+  )
+
+
+# effect + intercept is the predicted value of the caterpillar at the end of the julianWindow
+
+ggplot(data = HerbCatAnomaly_herbModel,
+       aes(x= centroidcaterpillar_prop, y = effect + intercept, colour = (100*(r2+ 0.001)),
+           weight = (100*(r2+ 0.001)))) + geom_point()+
+  geom_smooth(method = "lm", se = TRUE, color = "red") +
+  stat_poly_eq(
+    formula = y ~ x,
+    aes(label = paste(
+      after_stat(eq.label),
+      after_stat(rr.label),
+      after_stat(p.value.label),
+      sep = "~~~"
+    )),
+    parse = TRUE
+  ) +theme_bw() + labs( y = "Predicted total herbivory at end of julianWindow")
+
+
+
+
+
+ggplot(data = HerbCatAnomaly_herbModel,
+       aes(x= centroidcaterpillar_prop, y = effect, colour = (100*(r2+ 0.001)),
+           weight = (100*(r2+ 0.001)))) + geom_point()+
+  geom_smooth(method = "lm", se = TRUE, color = "red") +
+  stat_poly_eq(
+    formula = y ~ x,
+    aes(label = paste(
+      after_stat(eq.label),
+      after_stat(rr.label),
+      after_stat(p.value.label),
+      sep = "~~~"
+    )),
+    parse = TRUE
+  ) +theme_bw() + labs( y = "Herbivory rate")
+
+
+
+
+
+ggplot(data = HerbCatAnomaly_herbModel,
+       aes(x= maxcaterpillar_density, y = effect  + intercept, 
+           colour = (100*(r2+ 0.001)),
+           weight = (100*(r2+ 0.001)))) + geom_point()+
+  geom_smooth(method = "lm", se = TRUE, color = "red") +
+  stat_poly_eq(
+    formula = y ~ x,
+    aes(label = paste(
+      after_stat(eq.label),
+      after_stat(rr.label),
+      after_stat(p.value.label),
+      sep = "~~~"
+    )),
+    parse = TRUE
+  ) +theme_bw() + labs( y = "Predicted total herbivory at end of julianWindow")
+
+
+
+
+
+
+
+
+ggplot(data = HerbCatAnomaly_herbModel,
+       aes(y= centroidweekAnomaly, x = centroidcaterpillar_propAnomaly)) + geom_point()+
+  geom_smooth(method = "lm", se = TRUE, color = "red") +
+  geom_vline(xintercept = 0, linetype = "dashed", linewidth = 0.6) +
+  geom_hline(yintercept = 0, linetype = "dashed", linewidth = 0.6) +
+  stat_poly_eq(
+    formula = y ~ x,
+    aes(label = paste(
+      after_stat(eq.label),
+      after_stat(rr.label),
+      after_stat(p.value.label),
+      sep = "~~~"
+    )),
+    parse = TRUE
+  ) +theme_bw() + labs( y = "Centroid herbivory anomaly", x= "Centroid anomaly for caterpillar proportion of occurence")
+
+
+
+HerbCatAnomaly_herbModel.Lat = fullDataset %>% 
+  group_by(Name, ObservationMethod) %>% 
+  summarise(Latitude = mean(Latitude, na.rm = TRUE),
+            Longitude = mean(Longitude, na.rm = TRUE)) %>% 
+  right_join( HerbCatAnomaly_herbModel %>% extract(
+    siteObserv,
+    into = c("Name", "ObservationMethod"),
+    regex = "(.*)_(.*)",
+    remove = FALSE
+  ), 
+  by = c("Name" = "Name", "ObservationMethod"))
+
+
+
+
+
+
+#  Herb_Rate ~ Temperature ----
+
+# -- First, retrieve the good sites based on the those that are good for the actual phenometrics
+
+
+tmp_file = tempfile(fileext = ".csv")
+
+AnomalySites = HerbCatAnomaly_herbModel.Lat[, c("Name","Year", "Latitude", "Longitude")] %>% 
+  filter(Longitude >= -100) %>% 
+  group_by(Name, Latitude, Longitude) %>% 
+  summarise(n = n()) %>% 
+  select(-n) %>% as.data.frame()   
+
+AnomalyDaymetr = AnomalySites %>% 
+  rename(
+    site = Name,
+    lat = Latitude,
+    lon = Longitude
+  ) %>%
+  write.csv(tmp_file, row.names = FALSE)
+
+
+# pass temp CSV to function
+TempAnomaly = download_daymet_batch(
+  file_location = tmp_file,
+  start = min(HerbCatAnomaly_herbModel.Lat$Year),
+  end = 2024, # this is the most recent available in daymetr
+  internal = TRUE
+)
+
+# remove temporary file 
+unlink(tmp_file)
+
+
+TempAnomalyData_clean <- lapply(TempAnomaly, function(x) {
+  x$data %>% mutate(site = x$site,
+                    Latidue = x$latitude,
+                    Longitude = x$longitude)
+})
+
+AllTempAnomaly= bind_rows(TempAnomalyData_clean)
+
+
+
+
+
+
+HerbTempAnomaly = AllTempAnomaly %>% 
+  filter(yday %in% TempDayWindow) %>% 
+  group_by(site, year) %>% 
+  summarise(meanTmin = mean(tmin..deg.c.), # average site level yearly minimum temperature
+            meanTmax = mean(tmax..deg.c.),
+            meanPreci = mean(prcp..mm.day.)) %>% 
+  left_join(
+    AllTempData %>% 
+      filter(yday %in% TempDayWindow) %>% 
+      group_by(site) %>% 
+      summarise(AllmeanTmin = mean(tmin..deg.c.), # Across all years, what is the sites average minimum temperature (?)
+                AllmeanTmax = mean(tmax..deg.c.),
+                AllmeanPreci = mean(prcp..mm.day.)),
+    by = c("site")) %>% 
+  mutate(AnomalTmin = meanTmin - AllmeanTmin,
+         AnomalTmax = meanTmax - AllmeanTmax,
+         AnomalPreci = meanPreci - AllmeanPreci)%>% 
+  inner_join(HerbCatAnomaly_herbModel.Lat %>%  filter(Year != "2025"), # because daymetr has no 2025 yet.
+             by = c("site" = "Name", "year" = "Year")) %>% data.frame()
+
+
+## Correlate important variables----
+
+corrplot(cor(HerbTempAnomaly %>%
+               select(maxHerb, effect, intercept, r2, centroidweek,
+                      centroidcaterpillar_density, centroidcaterpillar_prop, maxcaterpillar_prop,
+                      centroidweekAnomaly, centroidcaterpillar_propAnomaly, AnomalTmin,  AnomalTmax, AnomalPreci, Latitude)%>%
+               mutate(across(everything(), ~ifelse(is.infinite(.), NA, .))),
+             use = "pairwise.complete.obs"),  
+         method = "color", 
+         type = "upper",          
+         addCoef.col = "black",    
+         tl.col = "black",         
+         tl.srt = 45,              
+         diag = FALSE)  
+
+
+
+
+
+
+
+ggplot(data = HerbTempAnomaly,
+       aes(y= centroidweekAnomaly, x = AnomalTmax)) + geom_point()+
+  geom_smooth(method = "lm", se = TRUE, color = "red") +
+  geom_vline(xintercept = 0, linetype = "dashed", linewidth = 0.6) +
+  geom_hline(yintercept = 0, linetype = "dashed", linewidth = 0.6) +
+  stat_poly_eq(
+    formula = y ~ x,
+    aes(label = paste(
+      after_stat(eq.label),
+      after_stat(rr.label),
+      after_stat(p.value.label),
+      sep = "~~~"
+    )),
+    parse = TRUE
+  ) +theme_bw() + labs( y = "Centroid herbivory anomaly", x= " Max.Temperature Anomaly")
+
+
+
+
+ggplot(data = HerbTempAnomaly,
+       aes(y= centroidcaterpillar_propAnomaly, x = AnomalTmax)) + geom_point()+
+  geom_smooth(method = "lm", se = TRUE, color = "red") +
+  geom_vline(xintercept = 0, linetype = "dashed", linewidth = 0.6) +
+  geom_hline(yintercept = 0, linetype = "dashed", linewidth = 0.6) +
+  stat_poly_eq(
+    formula = y ~ x,
+    aes(label = paste(
+      after_stat(eq.label),
+      after_stat(rr.label),
+      after_stat(p.value.label),
+      sep = "~~~"
+    )),
+    parse = TRUE
+  ) +theme_bw() + labs( y = "Centroid caterpillar proportion anomaly", x= " Max.Temperature Anomaly")
+
+
+
+
+
+
+
+
+
+
 
 
 

@@ -7,6 +7,7 @@ library(jsonlite)
 library(ineq)
 
 library(lme4)
+library(interactions)
 
 
 
@@ -106,7 +107,7 @@ r2(fitHerbGini)
 
 beta_fitHerbGini <- fixef(fitHerbGini)
 
-ggplot(HerbivoryGiniAdj, aes(x = Latitude, y = ilogitGini)) +
+ggplot(HerbivoryGiniAdj, aes(x = Latitude, y = ilogitGini, colour  = julianweek )) +
   geom_point(alpha = 0.3, size = 3) +
   geom_abline(
     intercept = beta_fitHerbGini["(Intercept)"],
@@ -326,7 +327,7 @@ Herb.Arthropod = fullHerb %>% select(-Latitude) %>%
 
 
 
-# Calculate herbivory anomaly-----
+# Inclusiuon criteria -----
 
 
 

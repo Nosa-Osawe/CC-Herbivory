@@ -195,7 +195,7 @@ sum(is.na(prop.dens.arthropod)) # all good
 
 
 
-# Herbivory + Arthropod data
+### Herbivory + Arthropod data----
 Herb.Arthropod = fullHerb %>% select(-Latitude) %>% 
   left_join(prop.dens.arthropod, 
             by = c("Name", "Year", "julianweek"),
@@ -207,7 +207,7 @@ Herb.Arthropod = fullHerb %>% select(-Latitude) %>%
 
 # Calculate herbivory anomaly-----
 
-
+### Inclusion criteria ----
 
 julianWindow = 120:230 # tweak this
 min.nJulianWeekYearSite = 5
@@ -265,6 +265,7 @@ dim(goodHerbData2)
 
 # Fit linear regression models for each julian week  as predictor for total herbivory
 
+# first make site and observation method one site.
 goodHerbData2_collapsed = goodHerbData2 %>% 
   mutate(siteObserv = paste0(Name, sep = "_", ObservationMethod)) %>% 
   select(siteObserv, Year, julianweek, totalHerbS) %>%
@@ -276,15 +277,19 @@ modelGoodHerb = goodHerbData2_collapsed %>%
     goodHerbData2_collapsed %>% 
       group_by(siteObserv, Year) %>% 
       summarise(nJulianweek = n_distinct(julianweek)) %>% 
-      filter(nJulianweek >= min.nJulianWeekYearSite), 
+      filter(nJulianweek >= min.nJulianWeekYearSite), # Earlier filtering (might) have solved this problem. See that dim (modelGoodHerb) keeps the row length the same
     by = c("siteObserv", "Year")
   ) %>% 
   as.data.frame() %>% 
   mutate(
-    julianweek_C = scale(julianweek),
-    julianweek_N = (julianweek - min(julianweek)) / (max(julianweek) - min(julianweek))
+    julianweek_C = scale(julianweek), # Z-score transformation
+    julianweek_N = (julianweek - min(julianweek)) / (max(julianweek) - min(julianweek)) # Min- max normalization
   )
 
+# The idea behind mutating with the Min-Max normalized variable is that I can calculate total herbivory per unit increase over the 
+# growing season. Note that the unit here is growing season (not per julian week)
+# The z transformed variables is not of real use for now. But I think of its use if I am to switch to carrying out the analysis 
+# using the brms package (for Bayesian statistics)
 
 
 #####################################################################################
@@ -334,7 +339,7 @@ summary(
  
  
 
-ggplot(herbModelOutput.Lat, aes(x = Latitude, y = effect, weight = r2)) +
+ggplot(herbModelOutput.Lat, aes(x = Latitude, y = effect, weight = (100*(r2+ 0.001)))) +
   geom_point(size = 3, aes(colour = r2), alpha = 0.9, position = position_jitter(width = 0.1, height = 0.1)) +
   geom_smooth(method = "lm", se = TRUE, color = "red") +
   stat_poly_eq(
@@ -351,9 +356,9 @@ ggplot(herbModelOutput.Lat, aes(x = Latitude, y = effect, weight = r2)) +
 
 
 fit_lme_wt <- lme(
-  fixed = effect ~ Latitude + intercept,
+  fixed = effect ~ Latitude ,
   random = ~ 1 | siteObserv,
-  weights = ~ (r2+ 0.001),  
+  weights = varFixed(~ (1-r2 + 0.001)), # Weigh by % of variance explained.
   data = herbModelOutput.Lat,
   method = "REML"
 )
@@ -369,6 +374,7 @@ herbModelOutput.Lat
 
 
 
+#  Herb_Rate ~ Temperature ----
 
 # -- First, retrieve the good sites based on the those that are good for the actual phenometrics
 
@@ -415,14 +421,14 @@ AllTempData = bind_rows(TempSiteData_clean)
 HerbTemp = AllTempData %>% 
   filter(yday %in% TempDayWindow) %>% 
   group_by(site, year) %>% 
-  summarise(meanTmin = mean(tmin..deg.c.),
+  summarise(meanTmin = mean(tmin..deg.c.), # average site level yearly minimum temperature
             meanTmax = mean(tmax..deg.c.),
             meanPreci = mean(prcp..mm.day.)) %>% 
   left_join(
     AllTempData %>% 
       filter(yday %in% TempDayWindow) %>% 
       group_by(site) %>% 
-      summarise(AllmeanTmin = mean(tmin..deg.c.),
+      summarise(AllmeanTmin = mean(tmin..deg.c.), # Across all years, what is the sites average minimum temperature (?)
                 AllmeanTmax = mean(tmax..deg.c.),
                 AllmeanPreci = mean(prcp..mm.day.)),
     by = c("site")) %>% 
@@ -443,24 +449,24 @@ HerbTemp_W = HerbTemp %>% # This is the dataframe I would be working with to fin
 
 summary(HerbTemp_W)
 
-# Remove siteObserv and keep only numeric variables
-corrplot(cor(HerbTemp_W %>%
-  select(-siteObserv) %>%        
-  select(where(is.numeric)),     
-  use = "pairwise.complete.obs"),  
-method = "color", 
-type = "upper",          
-addCoef.col = "black",    
-tl.col = "black",         
-tl.srt = 45,              
-diag = FALSE)    
+  # Remove siteObserv and keep only numeric variables
+  corrplot(cor(HerbTemp_W %>%
+    select(-siteObserv) %>%        
+    select(where(is.numeric)),     
+    use = "pairwise.complete.obs"),  
+  method = "color", 
+  type = "upper",          
+  addCoef.col = "black",    
+  tl.col = "black",         
+  tl.srt = 45,              
+  diag = FALSE)    
  
 
 
 fit_temp<- lme(
   fixed = effect ~ meanTmin ,
   random = ~ 1 | siteObserv,
-  weights = ~ (r2+ 0.001),  
+  weights = ~ (1-r2+ 0.001),  
   data = HerbTemp_W,
   method = "REML"
 )
@@ -469,7 +475,7 @@ r2(fit_temp)
 
 
  
-## Anomaly on rate of herbivory increase 
+## Anomaly on rate of herbivory increase ----
 
 
 HerbRateAnomaly = herbModelOutput.Lat %>% 
@@ -487,16 +493,85 @@ HerbRateAnomaly = herbModelOutput.Lat %>%
   HerbTemp %>% select(- c( intercept_lwr, intercept_upr, effect_lwr, effect_upr)), 
   by = c("siteObserv", "Year" = "year")) %>% as.data.frame()
  
-ggplot(HerbRateAnomaly, aes(x = AnomalTmin, y = effectAnomal))+
-  geom_point()
 
-wh
+corrplot(cor(HerbRateAnomaly %>%
+               select(where(is.numeric)),     
+             use = "pairwise.complete.obs"),  
+         method = "color", 
+         type = "upper",          
+         addCoef.col = "black",    
+         tl.col = "black",         
+         tl.srt = 45,              
+         diag = FALSE)  
+
+
+
+
+ggplot(HerbRateAnomaly, aes(x = AnomalTmin, y = effectAnomal))+
+  geom_point()+
+  geom_smooth(method = "lm", se = TRUE, color = "red") +
+  stat_poly_eq(
+    aes(label = paste(..eq.label.., ..rr.label.., sep = "~~~")),
+    formula = y ~ x,
+    parse = TRUE
+  )
+
+
+ggplot(HerbRateAnomaly, aes(x = AnomalTmax, y = effectAnomal))+
+  geom_point()+
+  geom_smooth(method = "lm", se = TRUE, color = "red") +
+  stat_poly_eq(
+    aes(label = paste(..eq.label.., ..rr.label.., sep = "~~~")),
+    formula = y ~ x,
+    parse = TRUE
+  )
+
 
 
 ggplot(HerbRateAnomaly, aes(x = AnomalTmin, y = r2Anomal))+
   geom_point()+
-  stat_smooth(method = "lm")
+  geom_smooth(method = "lm", se = TRUE, color = "red") +
+  stat_poly_eq(
+    aes(label = paste(..eq.label.., ..rr.label.., sep = "~~~")),
+    formula = y ~ x,
+    parse = TRUE
+  )
 
 ggplot(HerbRateAnomaly, aes(x = AnomalTmax, y = r2Anomal))+
   geom_point()+
-  stat_smooth(method = "lm")
+  geom_smooth(method = "lm", se = TRUE, color = "red") +
+  stat_poly_eq(
+    aes(label = paste(..eq.label.., ..rr.label.., sep = "~~~")),
+    formula = y ~ x,
+    parse = TRUE
+  )
+
+
+ggplot(HerbRateAnomaly, aes(x = AnomalPreci, y = effectAnomal))+
+  geom_point()+
+  geom_smooth(method = "lm", se = TRUE, color = "red") +
+  stat_poly_eq(
+    formula = y ~ x,
+    aes(label = paste(
+      after_stat(eq.label),
+      after_stat(rr.label),
+      after_stat(p.value.label),
+      sep = "~~~"
+    )),
+    parse = TRUE
+  )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
