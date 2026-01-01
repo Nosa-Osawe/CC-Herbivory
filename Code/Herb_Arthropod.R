@@ -155,20 +155,48 @@ prop_fullDataset = fullDataset %>%
 
 
 # Arthropod density: density per week----
+
 dens_fullDataset = fullDataset %>%
-  filter( # potentially filter for (1) julian window and (2) sites
-    WetLeaves == 0) %>% 
+  filter(WetLeaves == 0) %>% 
   group_by(Name, ObservationMethod, Latitude, Longitude, Year, julianweek) %>%
-  summarize(nSurv = n_distinct(ID),
-            caterpillar_density = sum(Group == 'caterpillar', na.rm = TRUE)/nSurv,
-            spider_density = sum(Group == 'spider', na.rm = TRUE)/nSurv,
-            beetle_density = sum(Group == 'beetle', na.rm = TRUE)/nSurv,
-            truebug_density = sum(Group == 'truebugs', na.rm = TRUE)/nSurv,
-            hopper_density = sum(Group == 'leafhopper', na.rm = TRUE)/nSurv,
-            ant_density = sum(Group == 'ant', na.rm = TRUE)/nSurv,
-            grasshopper_density = sum(Group == "grasshopper", na.rm = TRUE)/nSurv,
-            fly_density = sum(Group == "fly", na.rm = TRUE)/nSurv,
-            daddylonglegs_density = sum(Group == "daddylonglegs", na.rm = TRUE)/nSurv) 
+  summarise(
+    nSurv = n_distinct(ID),
+    
+    caterpillar_density =
+      sum(Quantity[Group == "caterpillar"], na.rm = TRUE) / nSurv,
+    
+    spider_density =
+      sum(Quantity[Group == "spider"], na.rm = TRUE) / nSurv,
+    
+    beetle_density =
+      sum(Quantity[Group == "beetle"], na.rm = TRUE) / nSurv,
+    
+    truebug_density =
+      sum(Quantity[Group == "truebugs"], na.rm = TRUE) / nSurv,
+    
+    hopper_density =
+      sum(Quantity[Group == "leafhopper"], na.rm = TRUE) / nSurv,
+    
+    ant_density =
+      sum(Quantity[Group == "ant"], na.rm = TRUE) / nSurv,
+    
+    grasshopper_density =
+      sum(Quantity[Group == "grasshopper"], na.rm = TRUE) / nSurv,
+    
+    fly_density =
+      sum(Quantity[Group == "fly"], na.rm = TRUE) / nSurv,
+    
+    daddylonglegs_density =
+      sum(Quantity[Group == "daddylonglegs"], na.rm = TRUE) / nSurv,
+    
+    .groups = "drop"
+  ) %>% as.data.frame()
+
+
+
+
+
+
 
 
 
@@ -550,7 +578,35 @@ ggplot(data = HerbCatAnomaly_herbModel,
   ) +theme_bw() + labs( y = "Predicted total herbivory at end of julianWindow")
 
 
+ggplot(data = HerbCatAnomaly_herbModel,
+       aes(x= centroidcaterpillar_prop, y = centroidweek)) + geom_point()+
+  geom_smooth(method = "lm", se = TRUE, color = "red") +
+  stat_poly_eq(
+    formula = y ~ x,
+    aes(label = paste(
+      after_stat(eq.label),
+      after_stat(rr.label),
+      after_stat(p.value.label),
+      sep = "~~~"
+    )),
+    parse = TRUE
+  ) +theme_bw() + labs( y = "Centroid herbivory")
 
+
+
+ggplot(data = HerbCatAnomaly_herbModel,
+       aes(x= centroidcaterpillar_density, y = centroidweek)) + geom_point()+
+  geom_smooth(method = "lm", se = TRUE, color = "red") +
+  stat_poly_eq(
+    formula = y ~ x,
+    aes(label = paste(
+      after_stat(eq.label),
+      after_stat(rr.label),
+      after_stat(p.value.label),
+      sep = "~~~"
+    )),
+    parse = TRUE
+  ) +theme_bw() + labs( y = "Centroid herbivory")
 
 
 
@@ -571,6 +627,36 @@ ggplot(data = HerbCatAnomaly_herbModel,
     )),
     parse = TRUE
   ) +theme_bw() + labs( y = "Centroid herbivory anomaly", x= "Centroid anomaly for caterpillar proportion of occurence")
+
+
+ggplot(data = HerbCatAnomaly_herbModel,
+       aes(y= centroidweekAnomaly, x = centroidcaterpillar_densityAnomaly)) + geom_point()+
+  geom_smooth(method = "lm", se = TRUE, color = "red") +
+  geom_vline(xintercept = 0, linetype = "dashed", linewidth = 0.6) +
+  geom_hline(yintercept = 0, linetype = "dashed", linewidth = 0.6) +
+  stat_poly_eq(
+    formula = y ~ x,
+    aes(label = paste(
+      after_stat(eq.label),
+      after_stat(rr.label),
+      after_stat(p.value.label),
+      sep = "~~~"
+    )),
+    parse = TRUE
+  ) +theme_bw() + labs( y = "Centroid herbivory anomaly", x= "Centroid anomaly for caterpillar density")
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -664,14 +750,15 @@ HerbTempAnomaly = AllTempAnomaly %>%
 corrplot(cor(HerbTempAnomaly %>%
                select(maxHerb, effect, intercept, r2, centroidweek,
                       centroidcaterpillar_density, centroidcaterpillar_prop, maxcaterpillar_prop,
-                      centroidweekAnomaly, centroidcaterpillar_propAnomaly, AnomalTmin,  AnomalTmax, AnomalPreci, Latitude)%>%
+                      centroidweekAnomaly, centroidcaterpillar_propAnomaly, centroidcaterpillar_densityAnomaly,
+                      AnomalTmin,  AnomalTmax, AnomalPreci, Latitude)%>%
                mutate(across(everything(), ~ifelse(is.infinite(.), NA, .))),
              use = "pairwise.complete.obs"),  
          method = "color", 
          type = "upper",          
          addCoef.col = "black",    
          tl.col = "black",         
-         tl.srt = 45,              
+         tl.srt = 80,              
          diag = FALSE)  
 
 
