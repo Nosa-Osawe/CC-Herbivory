@@ -8,13 +8,13 @@ generaGoodSpatial = c("Acer", "Aesculus", "Amelanchier", "Betula", "Carpinus", "
 
 
 
-min.Genus.nSurv = 5
+min.Genus.nSurv = 6
 julianWindow = 120:230
 min.nJulianWeekYearSite = 7
 min.nSurvWeekYearSite = 20
 min.nYear = 3
 TempDayWindow = 120: 230
-minLatRange = 5
+minLatRange = 6
 
 goodGenusSurv = fullDataset %>% 
   filter( julianweek %in% julianWindow,
@@ -39,4 +39,4 @@ goodGenusYear %>%
   summarise(latMin = min(Latitude),
             latMax = max(Latitude),
             latRange = round((latMax - latMin), 2)) %>% 
-  filter(latRange >= minLatRange) # A dosen good plant!
+  filter(latRange >= minLatRange) # 1/2 A dosen good plant!
