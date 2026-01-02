@@ -3,7 +3,7 @@
 library(tidyverse)
 library(jsonlite)
 library(daymetr)
-
+library(nlme)
 
 
 # CC data ----
@@ -226,11 +226,10 @@ Herb.Arthropod = fullHerb %>% select(-Latitude) %>%
 
 
 
-# Calculate herbivory anomaly-----
+# Data wrangling pipeline:----
 
 
-
-
+#$ Define inclusion criteria ----
 
 julianWindow = 120:230
 min.nJulianWeekYearSite = 6
@@ -238,44 +237,47 @@ min.nSurvWeekYearSite = 20
 min.nYear = 3
 TempDayWindow = 120: 230
 
-
-# Two different data cleaning pipeline leads to sightly different outcome:
+## Wranglr data -----
 
 # 1. Define a good JulianWeek
 # 2. Define good nSurv
 # 3. Define good survey years
 
-goodJulianWeek = Herb.Arthropod %>% 
-  filter(julianweek %in% julianWindow) %>% 
-  group_by(Name, ObservationMethod, Year) %>% 
-  summarise(nJulianWeek = n_distinct(julianweek)) %>% 
-  filter(nJulianWeek >= min.nJulianWeekYearSite)
+# goodJulianWeek = Herb.Arthropod %>% 
+#   filter(julianweek %in% julianWindow) %>% 
+#   group_by(Name, ObservationMethod, Year) %>% 
+#   summarise(nJulianWeek = n_distinct(julianweek)) %>% 
+#   filter(nJulianWeek >= min.nJulianWeekYearSite)
+# 
+#  
+# 
+# goodnSurv = fullDataset %>% 
+#   right_join(goodJulianWeek, by = c("Name", "ObservationMethod", "Year")) %>% 
+#   group_by(Name, ObservationMethod, Year, julianweek) %>% 
+#   summarise(nSurv = n_distinct(ID)) %>% 
+#   filter(nSurv >= min.nSurvWeekYearSite)
+# 
+# 
+# 
+# goodnYear = Herb.Arthropod %>% 
+#   right_join(goodnSurv, by = c("Name","ObservationMethod", "Year", "julianweek")) %>% 
+#   group_by(Name, ObservationMethod) %>% 
+#   summarise(nYear = n_distinct(Year)) %>% 
+#   filter(nYear >= min.nYear) %>% 
+#   filter(!is.na(ObservationMethod))
+# 
+# 
+# goodHerbData = Herb.Arthropod %>% 
+#   inner_join(goodJulianWeek, by = c("Name", "ObservationMethod", "Year")) %>% 
+#   inner_join(goodnSurv, by = c("Name", "ObservationMethod", "Year", "julianweek")) %>% 
+#   inner_join(goodnYear, by = c("Name", "ObservationMethod"))
+# 
+# dim(goodHerbData)
+#  ---------------------------------------------------------------------------------------------------------------------------------
 
- 
-
-goodnSurv = fullDataset %>% 
-  right_join(goodJulianWeek, by = c("Name", "ObservationMethod", "Year")) %>% 
-  group_by(Name, ObservationMethod, Year, julianweek) %>% 
-  summarise(nSurv = n_distinct(ID)) %>% 
-  filter(nSurv >= min.nSurvWeekYearSite)
 
 
 
-goodnYear = Herb.Arthropod %>% 
-  right_join(goodnSurv, by = c("Name","ObservationMethod", "Year", "julianweek")) %>% 
-  group_by(Name, ObservationMethod) %>% 
-  summarise(nYear = n_distinct(Year)) %>% 
-  filter(nYear >= min.nYear) %>% 
-  filter(!is.na(ObservationMethod))
-
-
-goodHerbData = Herb.Arthropod %>% 
-  inner_join(goodJulianWeek, by = c("Name", "ObservationMethod", "Year")) %>% 
-  inner_join(goodnSurv, by = c("Name", "ObservationMethod", "Year", "julianweek")) %>% 
-  inner_join(goodnYear, by = c("Name", "ObservationMethod"))
-
-dim(goodHerbData)
-#------------------------------------------------------------------------------------------
 
 # A. Define what counts as herbivory (0-4). Already done in preparation of Herb.Arthropod dataframe
 # 1. Define a good nSurv
@@ -318,15 +320,16 @@ dim(goodHerbData2)
 
 
 
-anti_join(goodHerbData, goodHerbData2, 
-          by = c("Name", "ObservationMethod", "Year", "julianweek")) %>% 
-  select(Name, ObservationMethod, Year, julianweek, nYearHerb)
-
+# anti_join(goodHerbData, goodHerbData2, 
+#           by = c("Name", "ObservationMethod", "Year", "julianweek")) %>% 
+#   select(Name, ObservationMethod, Year, julianweek, nYearHerb)
+# 
 
 
   
 #######################################################################################################
 
+#  Julian week as a predictor of totalherbivory ----
 # Fit linear regression models for each julian week  as predictor for total herbivory
 
 goodHerbData2_collapsed = goodHerbData2 %>% 
@@ -350,9 +353,7 @@ modelGoodHerb = goodHerbData2_collapsed %>%
   )
 
 
-
-#####################################################################################
-
+# function that makes juilianweek predictor of total herbivory at a site-year----
 
 fit_herb_model =function(df) {
   
@@ -374,7 +375,7 @@ herbModelOutput = modelGoodHerb %>%
   group_modify(~ fit_herb_model(.x)) %>% # passes each group's time series into the model
   ungroup()
 
-
+# Add latitude information to the 'herbivory ~ julianweek' model
 herbModelOutput.Lat = herbModelOutput %>% 
   separate(siteObserv, into = c("Name", "ObservationMethod"), sep = "_") %>% 
   left_join(fullDataset %>% select(Name, Latitude, Longitude) %>% 
@@ -478,6 +479,7 @@ corrplot(cor(HerbCatAnomaly_herbModel %>%
          tl.srt = 45,              
          diag = FALSE)  
 
+## Maximum total herb ~ max caterpillar prop occurrence ----
 
 ggplot(data = HerbCatAnomaly_herbModel,
        aes(x= maxcaterpillar_prop, y = maxHerb)) +
@@ -489,6 +491,7 @@ ggplot(data = HerbCatAnomaly_herbModel,
     parse = TRUE
   )
 
+## Max total herb (%) ~ centroid Cat. density ----
 
 ggplot(data = HerbCatAnomaly_herbModel,
        aes(x= centroidcaterpillar_density, y = maxHerb)) + geom_point()+
@@ -504,8 +507,32 @@ ggplot(data = HerbCatAnomaly_herbModel,
     parse = TRUE
   )
 
+ggplot(HerbCatAnomaly_herbModel,
+       aes(x = centroidcaterpillar_prop, y = maxHerb)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = TRUE, color = "red") +
+  stat_poly_eq(
+    formula = y ~ x,
+    aes(label = paste(
+      after_stat(eq.label),
+      after_stat(rr.label),
+      after_stat(p.value.label),
+      sep = "~~~"
+    )),
+    parse = TRUE
+  ) +theme_bw() + labs( y = "max total %Herb")
+
+summary(lme(
+  maxHerb ~ centroidcaterpillar_prop,
+  random = ~ 1 | siteObserv,
+  data = HerbCatAnomaly_herbModel,
+  method = "REML",
+  na.action = na.omit
+))
 
 
+
+## Max total herb (%) ~ centroid Cat. prop occurence ----
 ggplot(data = HerbCatAnomaly_herbModel,
        aes(x= centroidcaterpillar_prop, y = maxHerb)) + geom_point()+
   geom_smooth(method = "lm", se = TRUE, color = "red") +
@@ -521,7 +548,9 @@ ggplot(data = HerbCatAnomaly_herbModel,
   )
 
 
-# effect + intercept is the predicted value of the caterpillar at the end of the julianWindow
+# effect + intercept is the predicted value of the herbivory at the end of the julianWindow
+
+## predicted herbivory ~ centroid cat prop. occurence ----
 
 ggplot(data = HerbCatAnomaly_herbModel,
        aes(x= centroidcaterpillar_prop, y = effect + intercept, colour = (100*(r2+ 0.001)),
@@ -537,8 +566,6 @@ ggplot(data = HerbCatAnomaly_herbModel,
     )),
     parse = TRUE
   ) +theme_bw() + labs( y = "Predicted total herbivory at end of julianWindow")
-
-
 
 
 
@@ -593,6 +620,13 @@ ggplot(data = HerbCatAnomaly_herbModel,
   ) +theme_bw() + labs( y = "Centroid herbivory")
 
 
+summary(lme(
+  centroidweek ~ centroidcaterpillar_prop,
+  random = ~ 1 | siteObserv,
+  data = HerbCatAnomaly_herbModel,
+  method = "REML",
+  na.action = na.omit
+))
 
 ggplot(data = HerbCatAnomaly_herbModel,
        aes(x= centroidcaterpillar_density, y = centroidweek)) + geom_point()+
@@ -627,6 +661,18 @@ ggplot(data = HerbCatAnomaly_herbModel,
     )),
     parse = TRUE
   ) +theme_bw() + labs( y = "Centroid herbivory anomaly", x= "Centroid anomaly for caterpillar proportion of occurence")
+
+
+summary(
+  lme( # This is a random slope-only model (no random intercept!)
+    centroidweekAnomaly ~ centroidcaterpillar_propAnomaly,
+    random = ~ 0 + centroidcaterpillar_propAnomaly | siteObserv,
+    data = HerbCatAnomaly_herbModel,
+    method = "REML",
+    na.action = na.omit
+  )
+)
+
 
 
 ggplot(data = HerbCatAnomaly_herbModel,
@@ -803,6 +849,15 @@ ggplot(data = HerbTempAnomaly,
   ) +theme_bw() + labs( y = "Centroid caterpillar proportion anomaly", x= " Max.Temperature Anomaly")
 
 
+summary( # Theoretically, the intercept is supposed to be approximmately zero for all site 
+  lme( # This is a random slope-only model (no random intercept!)
+    centroidcaterpillar_propAnomaly ~ AnomalTmax,
+    random = ~ 0 + AnomalTmax | siteObserv,
+    data = HerbTempAnomaly,
+    method = "REML",
+    na.action = na.omit
+  )
+)
 
 
 
