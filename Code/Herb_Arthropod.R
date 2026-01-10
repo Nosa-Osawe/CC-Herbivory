@@ -4,6 +4,7 @@ library(tidyverse)
 library(jsonlite)
 library(daymetr)
 library(nlme)
+library(performance)
 
 
 # CC data ----
@@ -606,7 +607,7 @@ ggplot(data = HerbCatAnomaly_herbModel,
 
 
 ggplot(data = HerbCatAnomaly_herbModel,
-       aes(x= centroidcaterpillar_prop, y = centroidweek)) + geom_point()+
+       aes(x= centroidcaterpillar_prop, y = centroidweek)) + geom_point(size = 3, color = "darkgrey")+
   geom_smooth(method = "lm", se = TRUE, color = "red") +
   stat_poly_eq(
     formula = y ~ x,
@@ -617,7 +618,8 @@ ggplot(data = HerbCatAnomaly_herbModel,
       sep = "~~~"
     )),
     parse = TRUE
-  ) +theme_bw() + labs( y = "Centroid herbivory")
+  ) +theme_bw() + labs( y = "Centroid herbivory",
+                        subtitle = "Slope Est: 0.49 in Random-intercept model")
 
 
 summary(lme(
@@ -628,8 +630,10 @@ summary(lme(
   na.action = na.omit
 ))
 
+
 ggplot(data = HerbCatAnomaly_herbModel,
-       aes(x= centroidcaterpillar_density, y = centroidweek)) + geom_point()+
+       aes(x= centroidcaterpillar_density, y = centroidweek)) + 
+  geom_point(size = 3, color = "darkgrey")+
   geom_smooth(method = "lm", se = TRUE, color = "red") +
   stat_poly_eq(
     formula = y ~ x,
@@ -640,9 +644,17 @@ ggplot(data = HerbCatAnomaly_herbModel,
       sep = "~~~"
     )),
     parse = TRUE
-  ) +theme_bw() + labs( y = "Centroid herbivory")
+  ) +theme_bw() + labs( y = "Centroid herbivory",
+                        subtitle = "Slope Est: 0.42 in Random-intercept model")
 
 
+summary(lme(
+  centroidweek ~ centroidcaterpillar_density,
+  random = ~ 1 | siteObserv,
+  data = HerbCatAnomaly_herbModel,
+  method = "REML",
+  na.action = na.omit
+))
 
 
 
@@ -859,8 +871,14 @@ summary( # Theoretically, the intercept is supposed to be approximmately zero fo
   )
 )
 
-
-
+AnomalTmax.CentroidProp =  lme( # This is a random slope-only model (no random intercept!)
+  centroidcaterpillar_propAnomaly ~ AnomalTmax,
+  random = ~ 0 + AnomalTmax | siteObserv,
+  data = HerbTempAnomaly,
+  method = "REML",
+  na.action = na.omit
+)
+r2(AnomalTmax.CentroidProp) # same R2 as a fixed effect model.
 
 
 

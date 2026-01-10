@@ -349,22 +349,21 @@ ggplot(herbModelOutput.Lat, aes(x = Latitude, y = effect, weight = (100*(r2+ 0.0
   ) +
   theme_bw() +
   labs(
-    subtitle = "Mixed model showd R2= .64;marginal r2= 0.45; model : fixed = effect ~ Latitude + intercept,
-+   random = ~ 1 | siteObserv, Est:1.56",
     y = "Rate of herbivory per growing season"
   )
 
 
-fit_lme_wt <- lme(
-  fixed = effect ~ Latitude ,
-  random = ~ 1 | siteObserv,
-  weights = varFixed(~ (1-r2 + 0.001)), # Weigh by % of variance explained.
-  data = herbModelOutput.Lat,
-  method = "REML"
-)
-summary(fit_lme_wt)
-r2(fit_lme_wt)
-
+# This one here does not make sense, so I comment it out
+# fit_lme_wt <- lme(
+#   fixed = effect ~ Latitude ,
+#   random = ~ 1 | siteObserv,
+#   weights = varFixed(~ (1-r2 + 0.001)), # Weigh by % of variance explained.
+#   data = herbModelOutput.Lat,
+#   method = "REML"
+# )
+# summary(fit_lme_wt)
+# r2(fit_lme_wt)
+# 
 
 
 
