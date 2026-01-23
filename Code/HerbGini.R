@@ -481,7 +481,7 @@ ggplot(herbGini, aes(x = Latitude, y = ilogitGini.index)) +
 fit_giniWeek =   lme(
   fixed = ilogitGini.index ~ julianweek + Latitude,
   random = ~ 1 | siteObserv,
-  data = herbGini2,
+  data = herbGini,
   method = "REML"
 )
 

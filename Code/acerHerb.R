@@ -9,7 +9,7 @@ library(performance)
 library(corrplot)
 library(nlme)
 library(lme4)
-library(ggmisc)
+ 
 # CC data ----
 options(timeout = 300)  
 
@@ -25,7 +25,8 @@ github_raw <- "https://raw.githubusercontent.com/hurlbertlab/caterpillars-analys
 
 fullDataset <- read.csv(paste0(github_raw, latest_file))
 
-
+fullDataset= fullDataset %>% 
+  filter(plantGenus == "Acer")
 
 # proportion of herbivory per herb class----
 
@@ -126,7 +127,7 @@ herbUsingMean2= herbUsingMean%>%
 
 fullHerb = Herb1 %>% 
   left_join(herbUsingMean2 %>% select(-nSurv),
-                    by = c("Name", "Year", "julianweek")) %>% 
+            by = c("Name", "Year", "julianweek")) %>% 
   rename(nSurvHerb = nSurv)
 
 
@@ -134,7 +135,7 @@ fullHerb = Herb1 %>%
 # Arthropod data: prop of surv per week----
 prop_fullDataset = fullDataset %>%
   filter( # potentially filter for (1) julian window and (2) sites
-         WetLeaves == 0) %>% 
+    WetLeaves == 0) %>% 
   group_by(Name,ObservationMethod, Year, julianweek, ID) %>%
   summarize(caterpillar = ifelse(sum(Group == 'caterpillar', na.rm = TRUE) > 0, 1, 0),
             spider = ifelse(sum(Group == 'spider', na.rm = TRUE) > 0, 1, 0),
@@ -211,13 +212,13 @@ prop.dens.arthropod = prop_fullDataset %>%
   as.data.frame() %>% 
   rename(nSurvArthropod = nSurv) %>% 
   left_join( 
-  dens_fullDataset %>% 
-  group_by(Name, ObservationMethod) %>% 
-  summarise(nYearArthropod = n_distinct(Year)), 
-  by = c("Name", "ObservationMethod"))
+    dens_fullDataset %>% 
+      group_by(Name, ObservationMethod) %>% 
+      summarise(nYearArthropod = n_distinct(Year)), 
+    by = c("Name", "ObservationMethod"))
 
 sum(is.na(prop.dens.arthropod)) # all good
- 
+
 
 
 # Herbivory + Arthropod data
@@ -237,8 +238,8 @@ Herb.Arthropod = fullHerb %>% select(-Latitude) %>%
 
 julianWindow = 120:230
 min.nJulianWeekYearSite = 6
-min.nSurvWeekYearSite = 20
-min.nYear = 3
+min.nSurvWeekYearSite = 10
+min.nYear = 1 # values >= 2, here, are usfull only for anomaly. so far so good.
 TempDayWindow = 120: 230
 
 # Work on using green-up adjusted julianWindow for the data. 
@@ -324,6 +325,7 @@ goodHerbData2 = Herb.Arthropod %>%
 
 dim(goodHerbData2)
 
+unique(goodHerbData2$Name)
 
 
 # anti_join(goodHerbData, goodHerbData2, 
@@ -332,7 +334,7 @@ dim(goodHerbData2)
 # 
 
 
-  
+
 #######################################################################################################
 
 #  Julian week as a predictor of totalherbivory ----
@@ -500,7 +502,7 @@ ggplot(data = HerbCatAnomaly_herbModel,
 ## Max total herb (%) ~ centroid Cat. density ----
 
 ggplot(data = HerbCatAnomaly_herbModel,
-       aes(x= centroidcaterpillar_density, y = maxHerb)) + geom_point()+
+       aes(x= sqrt(maxcaterpillar_density), y = maxHerb)) + geom_point()+
   geom_smooth(method = "lm", se = TRUE, color = "red") +
   stat_poly_eq(
     formula = y ~ x,
@@ -513,34 +515,14 @@ ggplot(data = HerbCatAnomaly_herbModel,
     parse = TRUE
   )
 
-ggplot(HerbCatAnomaly_herbModel,
-       aes(x = centroidcaterpillar_prop, y = maxHerb)) +
-  geom_point() +
-  geom_smooth(method = "lm", se = TRUE, color = "red") +
-  stat_poly_eq(
-    formula = y ~ x,
-    aes(label = paste(
-      after_stat(eq.label),
-      after_stat(rr.label),
-      after_stat(p.value.label),
-      sep = "~~~"
-    )),
-    parse = TRUE
-  ) +theme_bw() + labs( y = "max total %Herb")
 
-summary(lme(
-  maxHerb ~ centroidcaterpillar_prop,
-  random = ~ 1 | siteObserv,
-  data = HerbCatAnomaly_herbModel,
-  method = "REML",
-  na.action = na.omit
-))
+
 
 
 
 ## Max total herb (%) ~ centroid Cat. prop occurence ----
 ggplot(data = HerbCatAnomaly_herbModel,
-       aes(x= centroidcaterpillar_prop, y = maxHerb)) + geom_point()+
+       aes(x= maxcaterpillar_prop, y = maxHerb)) + geom_point()+
   geom_smooth(method = "lm", se = TRUE, color = "red") +
   stat_poly_eq(
     formula = y ~ x,
@@ -556,22 +538,7 @@ ggplot(data = HerbCatAnomaly_herbModel,
 
 # effect + intercept is the predicted value of the herbivory at the end of the julianWindow
 
-## predicted herbivory ~ centroid cat prop. occurence ----
 
-ggplot(data = HerbCatAnomaly_herbModel,
-       aes(x= centroidcaterpillar_prop, y = effect + intercept, colour = (100*(r2+ 0.001)),
-           weight = (100*(r2+ 0.001)))) + geom_point()+
-  geom_smooth(method = "lm", se = TRUE, color = "red") +
-  stat_poly_eq(
-    formula = y ~ x,
-    aes(label = paste(
-      after_stat(eq.label),
-      after_stat(rr.label),
-      after_stat(p.value.label),
-      sep = "~~~"
-    )),
-    parse = TRUE
-  ) +theme_bw() + labs( y = "Predicted total herbivory at end of julianWindow")
 
 
 
@@ -596,8 +563,8 @@ ggplot(data = HerbCatAnomaly_herbModel,
 
 ggplot(data = HerbCatAnomaly_herbModel,
        aes(x= maxcaterpillar_density, y = effect  + intercept, 
-           colour = (100*(r2+ 0.001)),
-           weight = (100*(r2+ 0.001)))) + geom_point()+
+           colour = r2,
+           weight = r2)) + geom_point()+
   geom_smooth(method = "lm", se = TRUE, color = "red") +
   stat_poly_eq(
     formula = y ~ x,
@@ -661,7 +628,7 @@ ggplot(data = HerbCatAnomaly_herbModel,
     )),
     parse = TRUE
   ) +theme_bw() + labs( y = "Centroid herbivory",
-                        subtitle = "Slope Est: 0.42 in Random-intercept model")
+                        subtitle = "Slope Est:... in Random-intercept model")
 
 
 summary(lme(
@@ -672,7 +639,13 @@ summary(lme(
   na.action = na.omit
 ))
 
-
+r2(lme(
+  centroidweek ~ centroidcaterpillar_density,
+  random = ~ 1 | siteObserv,
+  data = HerbCatAnomaly_herbModel,
+  method = "REML",
+  na.action = na.omit
+))
 
 ggplot(data = HerbCatAnomaly_herbModel,
        aes(y= centroidweekAnomaly, x = centroidcaterpillar_propAnomaly)) + geom_point()+
@@ -726,7 +699,13 @@ ggplot(data = HerbCatAnomaly_herbModel,
   ) +theme_bw() + labs( y = "Centroid herbivory anomaly", x= "Centroid anomaly for caterpillar density")
 
 
-
+r2(lme( # This is a random slope-only model (no random intercept!)
+  centroidweekAnomaly ~ centroidcaterpillar_densityAnomaly,
+  random = ~ 0 + centroidcaterpillar_densityAnomaly | siteObserv,
+  data = HerbCatAnomaly_herbModel,
+  method = "REML",
+  na.action = na.omit
+))
 
 
 
@@ -811,7 +790,7 @@ HerbTempAnomaly = AllTempAnomaly %>%
             meanTmax = mean(tmax..deg.c.),
             meanPreci = mean(prcp..mm.day.)) %>% 
   left_join(
-    AllTempData %>% 
+    AllTempAnomaly %>% 
       filter(yday %in% TempDayWindow) %>% 
       group_by(site) %>% 
       summarise(AllmeanTmin = mean(tmin..deg.c.), # Across all years, what is the sites average minimum temperature (?)
