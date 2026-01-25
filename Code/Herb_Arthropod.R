@@ -9,7 +9,7 @@ library(performance)
 library(corrplot)
 library(nlme)
 library(lme4)
-library(ggmisc)
+ 
 # CC data ----
 options(timeout = 300)  
 

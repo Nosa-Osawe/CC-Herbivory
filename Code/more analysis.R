@@ -295,3 +295,88 @@ Herb.Arthropod %>%
     strip.text = element_text(face = "bold"),
     legend.position = "top"
   )
+
+
+
+unique(Herb.Arthropod$Name)
+
+
+
+# For viz purpose: min-max normalize the herbivory and Caterpillar proportion within a site-year ----
+
+Herb.Arthropod %>% 
+  filter(plant)
+  filter(Name =="Acadia NP - Alder") %>% # Change site here
+  filter(julianweek %in% julianWindow) %>% 
+  filter(!Year %in% c(2014, 2015, 2020)) %>%    # May not need this filter in some sites
+  select(Name, ObservationMethod, Year, julianweek,
+         totalHerbS, caterpillar_prop, caterpillar_density) %>% 
+  group_by(Name, ObservationMethod, Year, julianweek) %>% 
+  summarise(
+    totalHerbS = mean(totalHerbS, na.rm = TRUE),
+    caterpillar_prop = mean(caterpillar_prop, na.rm = TRUE) * 100,
+    caterpillar_density = mean(caterpillar_density, na.rm = TRUE),
+    .groups = "drop"
+  ) %>% left_join(
+    Herb.Arthropod %>% 
+      filter(Name == "Acadia NP - Alder") %>% # Change site here
+      filter(julianweek %in% julianWindow) %>% 
+      filter(!Year %in% c(2014, 2015, 2020)) %>% 
+      select(Name, ObservationMethod, Year, julianweek,
+             totalHerbS, caterpillar_prop, caterpillar_density) %>% 
+      group_by(Name, ObservationMethod, Year, julianweek) %>% 
+      summarise(
+        totalHerbS = mean(totalHerbS, na.rm = TRUE),
+        caterpillar_prop = mean(caterpillar_prop, na.rm = TRUE) * 100,
+        caterpillar_density = mean(caterpillar_density, na.rm = TRUE),
+        .groups = "drop"
+      ) %>% 
+      group_by(Name, ObservationMethod, Year) %>% 
+      summarise(maxtotalHerbS = max(totalHerbS ),
+                maxcaterpillar_prop = max(caterpillar_prop),
+                maxcaterpillar_density = max(caterpillar_density)), by = c("Name", "ObservationMethod", "Year")
+  ) %>% 
+  mutate(caterpillar_prop.min.max = caterpillar_prop/ maxcaterpillar_prop,
+         totalHerbS.min.max = totalHerbS / maxtotalHerbS,
+         caterpillar_density.min.max = caterpillar_density/ maxcaterpillar_density) %>% 
+  pivot_longer(
+    cols = c(totalHerbS.min.max, caterpillar_prop.min.max),
+    names_to = "variable",
+    values_to = "value"
+  ) %>% 
+  ggplot(aes(x = julianweek, y = value, color = variable)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  facet_grid(
+    ObservationMethod ~ Year,
+    scales = "free_x"
+  ) +
+  scale_color_manual(
+    values = c(
+      "totalHerbS.min.max" = "#1b9e77",
+      "caterpillar_prop.min.max" = "#d95f02"
+    )
+  ) +
+  labs(
+    x = "Julian week",
+    y = "Min-max normalization of the herbivory and proportion of occurence (%)",
+    color = "",
+    title = "Acadia NP - Alder" ,              # Change the title there
+    subtitle = "Seasonal dynamics of herbivory and caterpillar occurrence"
+  ) +
+  theme_bw() +
+  theme(
+    strip.background = element_rect(fill = "grey90"),
+    strip.text = element_text(face = "bold"),
+    legend.position = "top"
+  )
+
+
+
+
+
+
+
+
+
+
