@@ -27,10 +27,10 @@ fullDataset <- read.csv(paste0(github_raw, latest_file))
 
 
 
-# 1. Define the directory where your files are stored
+# Define the directory where your files are stored
 data_dir = "Data/greenup"
 
-# 2. Get list of all Greenup_0 files
+#  Get list of all Greenup_0 files
 file_list = list.files(data_dir, pattern = "Greenup_0.*\\.tif$", full.names = TRUE)
 
 
@@ -45,12 +45,12 @@ sites = fullDataset %>%
 
 
 
-# 3. Prepare your base sites (do this once outside the loop)
+#  Prepare your base sites (do this once outside the loop)
 pts = st_as_sf(sites, coords = c("Longitude", "Latitude"), crs = 4326)
 # Define the target CRS string
 target_crs = "+proj=aea +lat_0=23 +lon_0=-96 +lat_1=29.5 +lat_2=45.5 +datum=WGS84"
 pts_aea = st_transform(pts, target_crs)
-buffers_vect = vect(st_buffer(pts_aea, dist = 1000)) # Convert to terra 'SpatVector' once
+buffers_vect = vect(st_buffer(pts_aea, dist = 1000)) # Convert to terra 'SpatVector' once (1km2)
 
 # 4. The Loop (using map or lapply)
 results_list = lapply(file_list, function(f) {
@@ -133,5 +133,5 @@ greenup_doy$DOY_source = ifelse(
   "observed"
 )
 
-greenup_doy
-
+greenup_doy %>% 
+  write.csv(file = "Data/greenup_doy.csv", row.names = FALSE)
