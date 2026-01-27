@@ -1,4 +1,11 @@
 
+# Script is useful to check the herbivory, arthropod density and occurrence at a community (site level)
+# see the plantGenusHerbArthopod.R script for plantGenus - site level analysis/EDA. 
+# Do not forget to source the herbivoryFunction.R
+# This script, as well as others in this CC-Herbivory should run independent of the other. 
+# So, it is recommended that you do not forget to clear the environment everytime you want to run a new script, as object names are shared and may mean different things for different scripts. "rm(list = ls())" Does this well.
+
+
 # Load libraries ----
 rm(list = ls())
 
@@ -31,8 +38,7 @@ fullDataset <- read.csv(paste0(github_raw, latest_file))
 
 source("Code/herbivoryFunctions.R")
 
-unique(fullDataset$Name)
-unique(fullDataset$plantGenus)
+unique(fullDataset$Name) # CC cites!
 
 
 
@@ -42,20 +48,19 @@ h2 = 7
 h3 = 17
 h4 = 62
 
-julianWindow = 120:230        # julainWindow 
+julianWindow = 120:300       # julainWindow (what i use typically is : 120:230)
 min.nJulianWeekYearSite = 6   # minimum number of julianWeeks for each site-year
 min.nSurvWeekYearSite = 20   # minimum number of site-year-week surveys
 min.nYear = 3        # minimum number of survey site-year
 TempDayWindow = 120: 230   # Temperature window
 
 # get_site is a custom function
-site = get_site( "Acadia NP - Sundew", fullDataset) # 'All' selects all
+site = get_site( "Acadia NP - Alder"  , fullDataset) # 'All' selects all
 
 
 
 fullDataset2 = fullDataset %>% 
-  filter(plantGenus %in% plantGenus,
-         Name %in% site)
+  filter(Name %in% site)
 
 
 
@@ -81,7 +86,8 @@ Herb1 = fullDataset2 %>%
   ) %>% 
   pivot_wider(
     names_from = Herb_category,
-    values_from = Herbcount
+    values_from = Herbcount,
+    values_fill = 0 
   ) %>% 
   left_join(
     fullDataset2 %>%   
@@ -91,27 +97,29 @@ Herb1 = fullDataset2 %>%
       group_by(Name, Year, julianweek) %>% 
       summarise(nSurv = n_distinct(ID)), by = c("Name", "Year", "julianweek")) %>% 
   as.data.frame() %>% 
-  mutate(Herb_0 = Herb_0/ nSurv,
-         Herb_1 = Herb_1/ nSurv,
-         Herb_2 = Herb_2/ nSurv,
-         Herb_3 = Herb_3/ nSurv,
-         Herb_4 = Herb_4/ nSurv) %>% 
-  rename(H0.prop = Herb_0,
-         H1.prop = Herb_1,
-         H2.prop = Herb_2,
-         H3.prop = Herb_3,
-         H4.prop = Herb_4)
-
+  mutate(
+    across(starts_with("Herb_"), ~ .x / nSurv)
+  ) %>% 
+  rename_with(
+    ~ sub("Herb_", "H.prop", .x),
+    starts_with("Herb_")
+  )
 
 
 # Herb score using the mean of the scale ----
 
 # here herbUsingMean is just using the mean/median of the herbivory scale to standardise the data
 
-herbUsingMean= fullDataset2 %>% 
-  filter(
-    !HerbivoryScore %in% c(-128, -1),
-  ) %>% 
+herb_weights = c(
+  "0" = h0,
+  "1" = h1,
+  "2" = h2,
+  "3" = h3,
+  "4" = h4
+)
+
+herbUsingMean = fullDataset2 %>% 
+  filter(!HerbivoryScore %in% c(-128, -1)) %>% 
   group_by(Name, Latitude, Year, julianweek, ID) %>% 
   summarise(Herb = mean(HerbivoryScore), .groups = "drop") %>% 
   group_by(Name, Latitude, Year, julianweek, Herb) %>% 
@@ -122,24 +130,29 @@ herbUsingMean= fullDataset2 %>%
   ) %>% 
   pivot_wider(
     names_from = Herb,
-    values_from = Herbcount
+    values_from = Herbcount,
+    values_fill = 0
   ) %>% 
   mutate(
-    H0 = `0` * h0,
-    H1 = `1` * h1,
-    H2 = `2` * h2,
-    H3 = `3` * h3,
-    H4 = `4` * h4
-  ) %>% 
-  mutate(
-    totalHerb = rowSums(across(H0:H4), na.rm = TRUE)
+    totalHerb = rowSums(
+      across(
+        intersect(names(herb_weights), names(.)),
+        ~ .x * herb_weights[cur_column()]
+      ),
+      na.rm = TRUE
+    )
   ) %>% 
   select(Name, Latitude, Year, julianweek, nSurv, totalHerb) %>% 
-  as.data.frame() %>% 
   group_by(Name, Latitude, Year, julianweek) %>% 
-  summarise(nSurv = sum(nSurv),
-            totalHerb = sum(totalHerb)) %>% 
-  mutate(totalHerbS = totalHerb/nSurv) # totalHerbS is the standardized total heribory (to account for survey effort)
+  summarise(
+    nSurv = sum(nSurv),
+    totalHerb = sum(totalHerb),
+    .groups = "drop"
+  ) %>% 
+  mutate(
+    totalHerbS = totalHerb / nSurv
+  )
+# totalHerbS is the standardized total heribory (to account for survey effort)
 
 herbUsingMean2= herbUsingMean%>% 
   left_join(
