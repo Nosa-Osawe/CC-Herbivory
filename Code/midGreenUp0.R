@@ -135,3 +135,11 @@ greenup_doy$DOY_source = ifelse(
 
 greenup_doy %>% 
   write.csv(file = "Data/greenup_doy.csv", row.names = FALSE)
+
+##############################################################################################
+
+greenup_doy = read.csv("Data/greenup_doy.csv")
+
+greenup_doy %>% 
+  filter(is.na(DOY)) %>% 
+  write.csv(file = "Data/NANs_greenup_doy.csv", row.names = FALSE)
