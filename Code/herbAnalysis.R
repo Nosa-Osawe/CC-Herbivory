@@ -331,7 +331,7 @@ herbModelOutput.Lat = herbModelOutput %>%
  
 
 summary(
-  lm(effect ~ Latitude + intercept,
+  lm(effect ~ Latitude ,
      data = herbModelOutput.Lat,
      weights = r2+0.0001)
 )
@@ -366,11 +366,11 @@ ggplot(herbModelOutput.Lat, aes(x = Latitude, y = effect, weight = (100*(r2+ 0.0
 # 
 
 
-
-
-
-herbModelOutput.Lat
-
+  
+  
+  
+  herbModelOutput.Lat
+  
 
 
 #  Herb_Rate ~ Temperature ----
