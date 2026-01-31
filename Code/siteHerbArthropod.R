@@ -2,13 +2,15 @@
 # Script is useful to check the herbivory, arthropod density and occurrence at a community (site level)
 # see the plantGenusHerbArthopod.R script for plantGenus - site level analysis/EDA. 
 # Do not forget to source the herbivoryFunction.R
-# This script, as well as others in this CC-Herbivory should run independent of the other. 
-# So, it is recommended that you do not forget to clear the environment everytime you want to run a new script, as object names are shared and may mean different things for different scripts. "rm(list = ls())" Does this well.
+# This script, as well as others in this CC-Herbivory should run independent of the others. 
+# So, it is recommended that you do not forget to clear the environment every time you want to run a new script, as object names are shared and may mean different things for different scripts. "rm(list = ls())" Does this well.
+
+
+# Clear R's brain
+rm(list = ls())
 
 
 # Load libraries ----
-rm(list = ls())
-
 library(tidyverse)
 library(jsonlite)
 
@@ -299,7 +301,13 @@ Herb.Arthropod = Herb.Arthropod %>%
          totalHerbS.min.max = totalHerbS / maxtotalHerbS,
          caterpillar_density.min.max = caterpillar_density/ maxcaterpillar_density) %>% 
   as.data.frame()
+
+
+# I found that this filtering sometimes eliminates some weeks of survery where nSurv is below threshold. So that the highest number
+# max(X/)Xmax is sometimes != 1.  For now, I think its fine that way. We can keep in mind that this is only for viz purpose.
 # Data wrangling pipeline:----
+
+
 
 # A. Define what counts as herbivory (0-4). Already done in preparation of Herb.Arthropod dataframe
 # 1. Define a good nSurv

@@ -60,7 +60,7 @@ TempDayWindow = 120: 230   # Temperature window
 
 
 site = get_site( "Prairie Ridge Ecostation", fullDataset)
-genusPlant = get_genera(plantGenus = "Quercus", fullDataset = fullDataset)
+genusPlant = get_genera(plantGenus = "Acer", fullDataset = fullDataset)
 
 fullDataset2 = fullDataset %>% 
   filter(
@@ -311,7 +311,8 @@ Herb.Arthropod = Herb.Arthropod %>%
          totalHerbS.min.max = ifelse(is.nan(totalHerbS.min.max), 0, totalHerbS.min.max),
          caterpillar_density.min.max = ifelse(is.nan(caterpillar_density.min.max), 0, caterpillar_density.min.max))
 
-
+# I found that this filtering sometimes eliminates some weeks of survery where nSurv is below threshold. So that the highest number
+# max(X/)Xmax is sometimes != 1.  For now, I think its fine that way. We can keep in mind that this is only for viz purpose.
 
 # Data wrangling pipeline:----
 
