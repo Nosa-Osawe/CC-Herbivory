@@ -1,4 +1,3 @@
-
 # Load libraries ----
 rm(list = ls())
 
@@ -10,8 +9,6 @@ library(performance)
 library(corrplot)
 library(nlme)
 library(lme4)
-library(ggpmisc)
-
 
 # CC data ----
 options(timeout = 300)  
@@ -31,36 +28,11 @@ fullDataset <- read.csv(paste0(github_raw, latest_file))
 
 
 
-
-
 greenup_doy = read.csv("Data/greenup_doy.csv")
 
 # Determine time steps away from mid greenup DOY ----
 JN1.steps = 60
 JN2.steps = JN1.steps + 70
-
-
-# INTERESTING CC SITES.... (but feel free to check others!)
-
-# [1] "Acadia NP - Alder"                    "Acadia NP - Sundew"                   "BHRC - Hemlock Draw"                 
-# [4] "BHRC Pan Hollow Uplands"              "Beare Swamp in Rouge Park"            "Belle Isle State Park, Lancaster, VA"
-# [7] "Birmingham Zoo AL"                    "Brookbanks Park"                      "Highlands Biological Station"        
-# [10] "Middle Mill"                          "NC Botanical Garden"                  "Prairie Ridge Ecostation"            
-# [13] "RVCC"                                 "Riverbend Park"                       "Stage Nature Center"                 
-# [16] "UNC Chapel Hill Campus"               "Virginia Zoo"                         "Walker Nature Center"    
-
-
-
-
-# INTERSTING CC PLANG GENUS .... (but feel free to check others!)
-
-# "Acer"  "Quercus"   "Prunus"    "Fagus"   "Carya"
-
-source("Code/herbivoryFunctions.R")
-
-unique(fullDataset$Name)
-sort(unique(fullDataset$plantGenus))
-
 
 
 h0 = 0
@@ -70,23 +42,13 @@ h3 = 17
 h4 = 62
 
 
-min.nJulianWeekYearSite = 6   # minimum number of julianWeeks for each site-year
-min.nSurvWeekYearSite = 10  # minimum number of site-year-week surveys
-min.nYear = 3        # minimum number of survey site-year
-TempDayWindow = 120: 230   # Temperature window
-
-# get_site is a custom function
+#$ Define inclusion criteria ----
 
 
-site = get_site( "All", fullDataset)
-genusPlant = get_genera(plantGenus = "Acer", fullDataset = fullDataset) # for now, this works well for one plantGenus ONLY.
-
-fullDataset2 = fullDataset %>% 
-  filter(
-    plantGenus %in% genusPlant,
-    Name %in% site
-  )
-
+min.nJulianWeekYearSite = 6
+min.nSurvWeekYearSite = 20
+min.nYear = 3
+TempDayWindow = 120: 230
 
 
 # Simple mid-greenup EDA
@@ -97,7 +59,9 @@ greenup_doy %>%
   as.data.frame()  
 
 
+
 # There is no 2025 Mid-greenUp data yet!
+
 # We estimate 2025 as same as 2024 midgreenup DOY (Its our best guess!)
 
 
@@ -111,7 +75,7 @@ greenup_doy_extended = bind_rows(
 )
 
 
-fullDatasetGreen = fullDataset2 %>% 
+fullDatasetGreen = fullDataset %>% 
   left_join(greenup_doy_extended, by = c("Name", "Longitude", "Latitude", "Year")) %>% 
   filter(
     julianday >= DOY_filled + JN1.steps,  
@@ -120,16 +84,13 @@ fullDatasetGreen = fullDataset2 %>%
 
 
 
-
-
-
 Herb1 = fullDatasetGreen %>% 
   filter(
     !HerbivoryScore %in% c(-128, -1)
   ) %>% 
-  group_by(Name, plantGenus, Year, julianweek,  ID) %>% 
+  group_by(Name, Year, julianweek, ID) %>% 
   summarise(Herb = mean(HerbivoryScore), .groups = "drop") %>% 
-  group_by(Name, plantGenus, Year, julianweek, Herb) %>% 
+  group_by(Name, Year, julianweek, Herb) %>% 
   summarise(
     Herbcount = n_distinct(ID),
     .groups = "drop"
@@ -145,43 +106,40 @@ Herb1 = fullDatasetGreen %>%
   ) %>% 
   pivot_wider(
     names_from = Herb_category,
-    values_from = Herbcount,
-    values_fill = 0 
+    values_from = Herbcount
   ) %>% 
   left_join(
     fullDatasetGreen %>%   
       filter(
         !HerbivoryScore %in% c(-128, -1)
       ) %>% 
-      group_by(Name, plantGenus, Year, julianweek) %>% 
-      summarise(nSurv = n_distinct(ID)), by = c("Name", "plantGenus", "Year", "julianweek")) %>% 
+      group_by(Name, Year, julianweek) %>% 
+      summarise(nSurv = n_distinct(ID)), by = c("Name", "Year", "julianweek")) %>% 
   as.data.frame() %>% 
-  mutate(
-    across(starts_with("Herb_"), ~ .x / nSurv)
-  ) %>% 
-  rename_with(
-    ~ sub("Herb_", "H.prop", .x),
-    starts_with("Herb_")
-  )
+  mutate(Herb_0 = Herb_0/ nSurv,
+         Herb_1 = Herb_1/ nSurv,
+         Herb_2 = Herb_2/ nSurv,
+         Herb_3 = Herb_3/ nSurv,
+         Herb_4 = Herb_4/ nSurv) %>% 
+  rename(H0.prop = Herb_0,
+         H1.prop = Herb_1,
+         H2.prop = Herb_2,
+         H3.prop = Herb_3,
+         H4.prop = Herb_4)
+
 
 
 # Herb score using the mean of the scale ----
 
-# here herbUsingMean is just using the mean/median of the herbivory scale to standardize the data
+# here herbUsingMean is just using the mean/median of the herbivory scale to standardise the data
 
-herb_weights = c(
-  "0" = h0,
-  "1" = h1,
-  "2" = h2,
-  "3" = h3,
-  "4" = h4
-)
-
-herbUsingMean = fullDatasetGreen %>% 
-  filter(!HerbivoryScore %in% c(-128, -1)) %>% 
-  group_by(Name, plantGenus, Latitude, Year, julianweek, ID) %>% 
+herbUsingMean= fullDatasetGreen %>% 
+  filter(
+    !HerbivoryScore %in% c(-128, -1),
+  ) %>% 
+  group_by(Name, Latitude, Year, julianweek, ID) %>% 
   summarise(Herb = mean(HerbivoryScore), .groups = "drop") %>% 
-  group_by(Name, plantGenus, Latitude, Year, julianweek, Herb) %>% 
+  group_by(Name, Latitude, Year, julianweek, Herb) %>% 
   summarise(
     Herbcount = n(),
     nSurv = n_distinct(ID),
@@ -189,53 +147,47 @@ herbUsingMean = fullDatasetGreen %>%
   ) %>% 
   pivot_wider(
     names_from = Herb,
-    values_from = Herbcount,
-    values_fill = 0
+    values_from = Herbcount
   ) %>% 
   mutate(
-    totalHerb = rowSums(
-      across(
-        intersect(names(herb_weights), names(.)),
-        ~ .x * herb_weights[cur_column()]
-      ),
-      na.rm = TRUE
-    )
-  ) %>% 
-  select(Name, plantGenus, Latitude, Year, julianweek, nSurv, totalHerb) %>% 
-  group_by(Name, plantGenus, Latitude, Year, julianweek) %>% 
-  summarise(
-    nSurv = sum(nSurv),
-    totalHerb = sum(totalHerb),
-    .groups = "drop"
+    H0 = `0` * h0,
+    H1 = `1` * h1,
+    H2 = `2` * h2,
+    H3 = `3` * h3,
+    H4 = `4` * h4
   ) %>% 
   mutate(
-    totalHerbS = totalHerb / nSurv
-  )
-# totalHerbS is the standardized total heribory (to account for survey effort)
-
-
-
+    totalHerb = rowSums(across(H0:H4), na.rm = TRUE)
+  ) %>% 
+  select(Name, Latitude, Year, julianweek, nSurv, totalHerb) %>% 
+  as.data.frame() %>% 
+  group_by(Name, Latitude, Year, julianweek) %>% 
+  summarise(nSurv = sum(nSurv),
+            totalHerb = sum(totalHerb)) %>% 
+  mutate(totalHerbS = totalHerb/nSurv) # totalHerbS is the standardized total heribory (to account for survey effort)
 
 herbUsingMean2= herbUsingMean%>% 
   left_join(
     herbUsingMean %>% 
-      group_by(Name, plantGenus) %>% 
+      group_by(Name) %>% 
       summarise(nYear = n_distinct(Year)),
-    by = c("Name", "plantGenus")) %>%
+    by = c("Name")) %>%
   mutate(Name = reorder(Name, Latitude))
 
 fullHerb = Herb1 %>% 
   left_join(herbUsingMean2 %>% select(-nSurv),
-            by = c("Name", "plantGenus", "Year", "julianweek")) %>% 
+            by = c("Name", "Year", "julianweek")) %>% 
   rename(nSurvHerb = nSurv)
 
 
 
+
+
 # Arthropod data: prop of surv per week----
-prop_fullDataset2 = fullDatasetGreen %>%
+prop_fullDataset = fullDatasetGreen %>%
   filter( # potentially filter for (1) julian window and (2) sites
     WetLeaves == 0) %>% 
-  group_by(Name, plantGenus, ObservationMethod, Year, julianweek, ID) %>%
+  group_by(Name,ObservationMethod, Year, julianweek, ID) %>%
   summarize(caterpillar = ifelse(sum(Group == 'caterpillar', na.rm = TRUE) > 0, 1, 0),
             spider = ifelse(sum(Group == 'spider', na.rm = TRUE) > 0, 1, 0),
             beetle = ifelse(sum(Group == 'beetle', na.rm = TRUE) > 0, 1, 0),
@@ -245,7 +197,7 @@ prop_fullDataset2 = fullDatasetGreen %>%
             grasshopper = ifelse(sum(Group == "grasshopper", na.rm = TRUE) > 0, 1, 0),
             fly = ifelse(sum(Group == "fly", na.rm = TRUE) > 0, 1, 0),
             daddylonglegs = ifelse(sum(Group == "daddylonglegs", na.rm = TRUE) > 0, 1, 0)) %>% 
-  group_by(Name, plantGenus,  ObservationMethod, Year, julianweek) %>% 
+  group_by(Name, ObservationMethod, Year, julianweek) %>% 
   summarise(caterpillar_prop = mean(caterpillar),
             spider_prop = mean(spider),
             beetle_prop = mean(beetle),
@@ -260,9 +212,9 @@ prop_fullDataset2 = fullDatasetGreen %>%
 
 # Arthropod density: density per week----
 
-dens_fullDataset2 = fullDatasetGreen %>%
+dens_fullDataset = fullDatasetGreen %>%
   filter(WetLeaves == 0) %>% 
-  group_by(Name, Latitude, Longitude, plantGenus, ObservationMethod, Year, julianweek) %>%
+  group_by(Name, ObservationMethod, Latitude, Longitude, Year, julianweek) %>%
   summarise(
     nSurv = n_distinct(ID),
     
@@ -303,32 +255,37 @@ dens_fullDataset2 = fullDatasetGreen %>%
 
 
 
-# Proportion and density data for all interesting arthropod 
 
-prop.dens.arthropod = prop_fullDataset2 %>% 
-  left_join(dens_fullDataset2 %>% select(-nSurv), 
-            by = c("Name",  "plantGenus", "ObservationMethod", "Year", "julianweek")) %>% 
+
+prop.dens.arthropod = prop_fullDataset %>% 
+  left_join(dens_fullDataset %>% select(-nSurv), 
+            by = c("Name", "ObservationMethod", "Year", "julianweek")) %>% 
   as.data.frame() %>% 
   rename(nSurvArthropod = nSurv) %>% 
   left_join( 
-    dens_fullDataset2 %>% 
-      group_by(Name, plantGenus, ObservationMethod, ) %>% 
+    dens_fullDataset %>% 
+      group_by(Name, ObservationMethod) %>% 
       summarise(nYearArthropod = n_distinct(Year)), 
-    by = c("Name", "plantGenus", "ObservationMethod"))
+    by = c("Name", "ObservationMethod"))
 
 sum(is.na(prop.dens.arthropod)) # all good
 
-prop_fullDataset2[!complete.cases(prop_fullDataset2), ] %>% as.data.frame() # NA's in plantGenus
+
 
 # Herbivory + Arthropod data
 Herb.Arthropod = fullHerb %>% select(-Latitude) %>% 
   left_join(prop.dens.arthropod, 
-            by = c("Name", "plantGenus", "Year", "julianweek"),
+            by = c("Name", "Year", "julianweek"),
             relationship = "many-to-many") %>% # due to multiple observation methods in one site
   data.frame() %>% rename(nYearHerb = nYear) %>% filter(!is.na(ObservationMethod))
 
 
+
+
 # Data wrangling pipeline:----
+
+
+
 
 # A. Define what counts as herbivory (0-4). Already done in preparation of Herb.Arthropod dataframe
 # 1. Define a good nSurv
@@ -339,39 +296,35 @@ Herb.Arthropod = fullHerb %>% select(-Latitude) %>%
 
 
 goodnSurv2 = fullDatasetGreen %>% 
-  right_join(Herb.Arthropod,
-             by = c("Name", "plantGenus", "ObservationMethod", "Year", "julianweek")) %>% 
-  group_by(Name, plantGenus, ObservationMethod, Year, julianweek) %>% 
+  right_join(Herb.Arthropod  %>% filter(julianweek %in% julianWindow),
+             by = c("Name",  "ObservationMethod", "Year", "julianweek")) %>% 
+  group_by(Name,  ObservationMethod, Year, julianweek) %>% 
   summarise(nSurv = n_distinct(ID)) %>% 
   filter(nSurv >= min.nSurvWeekYearSite) %>% data.frame()
 
 
 goodJulianWeek2 = Herb.Arthropod %>% 
-  right_join(goodnSurv2, by = c("Name", "plantGenus", "ObservationMethod", "Year", "julianweek")) %>% 
-  group_by(Name, plantGenus, ObservationMethod, Year) %>% 
+  right_join(goodnSurv2, by = c("Name", "ObservationMethod", "Year", "julianweek")) %>% 
+  group_by(Name, ObservationMethod, Year) %>% 
   summarise(nJulianWeek = n_distinct(julianweek)) %>% 
   filter(nJulianWeek >= min.nJulianWeekYearSite)
 
 
 
 goodnYear2 = Herb.Arthropod %>% 
-  right_join(goodJulianWeek2, by = c("Name", "plantGenus", "ObservationMethod", "Year")) %>% 
-  group_by(Name, plantGenus, ObservationMethod) %>% 
+  right_join(goodJulianWeek2, by = c("Name", "ObservationMethod", "Year")) %>% 
+  group_by(Name, ObservationMethod) %>% 
   summarise(nYearHerb = n_distinct(Year)) %>% 
   filter(nYearHerb >= min.nYear)
 
 
 
 goodHerbData2 = Herb.Arthropod %>% 
-  inner_join(goodnYear2, by  = c("Name", "plantGenus", "ObservationMethod" )) %>% # keep good years
-  inner_join(goodJulianWeek2, by = c("Name", "plantGenus", "ObservationMethod", "Year")) %>% # keep good weeks
-  inner_join(goodnSurv2, by = c("Name", "plantGenus", "ObservationMethod", "Year", "julianweek")) # Keep good surveys
+  inner_join(goodnYear2, by  = c("Name", "ObservationMethod")) %>% # keep good years
+  inner_join(goodJulianWeek2, by = c("Name", "ObservationMethod", "Year")) %>% # keep good weeks
+  inner_join(goodnSurv2, by = c("Name", "ObservationMethod", "Year", "julianweek")) # Keep good surveys
 
-
-# anti_join(goodHerbData, goodHerbData2, 
-#           by = c("Name", "ObservationMethod", "Year", "julianweek")) %>% 
-#   select(Name, ObservationMethod, Year, julianweek, nYearHerb)
-# 
+dim(goodHerbData2)
 
 
 
@@ -380,19 +333,16 @@ goodHerbData2 = Herb.Arthropod %>%
 #  Julian week as a predictor of totalherbivory ----
 # Fit linear regression models for each julian week  as predictor for total herbivory
 
-
-
-
 goodHerbData2_collapsed = goodHerbData2 %>% 
   mutate(siteObserv = paste0(Name, sep = "_", ObservationMethod)) %>% 
-  group_by(siteObserv, Name, plantGenus, ObservationMethod, Year, julianweek) %>%
+  select(siteObserv, Year, julianweek, totalHerbS) %>%
+  group_by(siteObserv, Year, julianweek) %>%
   summarise(totalHerbS = mean(totalHerbS), .groups = "drop") # use mean here due to repeated record
-
 
 modelGoodHerb = goodHerbData2_collapsed %>% 
   right_join(
     goodHerbData2_collapsed %>% 
-      group_by(siteObserv, plantGenus, Year) %>% 
+      group_by(siteObserv, Year) %>% 
       summarise(nJulianweek = n_distinct(julianweek)) %>% 
       filter(nJulianweek >= min.nJulianWeekYearSite), # This may not be necessary anymore
     by = c("siteObserv", "Year")
@@ -405,7 +355,6 @@ modelGoodHerb = goodHerbData2_collapsed %>%
 
 
 # function that makes juilianweek predictor of total herbivory at a site-year----
-# This may not work well if we choose more than one plantGenus per site.
 
 fit_herb_model =function(df) {
   
@@ -442,24 +391,21 @@ herbModelOutput.Lat = herbModelOutput %>%
 
 # Herbivory + caterpillar Anomaly ----
 
-
-# Herbivory + caterpillar Anomaly ----
-
 centroidHerbCat=  goodHerbData2 %>% 
   mutate(siteObserv = paste0(Name, sep = "_", ObservationMethod)) %>% 
   group_by(siteObserv, Year) %>% 
   summarise(maxHerb = max(totalHerbS, na.rm = TRUE),
             centroidweek = sum(julianweek * totalHerbS, na.rm = TRUE)/sum(totalHerbS, na.rm = TRUE),
-            maxH0.prop = max(H.prop0, na.rm = TRUE),
-            centroidH0 = sum(julianweek * H.prop0, na.rm = TRUE)/sum(H.prop0, na.rm = TRUE),
-            maxH1.prop = max(H.prop1, na.rm = TRUE),
-            centroidH1 = sum(julianweek * H.prop1, na.rm = TRUE)/sum(H.prop1, na.rm = TRUE),
-            maxH2.prop = max(H.prop2, na.rm = TRUE),
-            centroidH2 = sum(julianweek * H.prop2, na.rm = TRUE)/sum(H.prop2, na.rm = TRUE),
-            maxH3.prop = max(H.prop3, na.rm = TRUE),
-            centroidH3 = sum(julianweek * H.prop3, na.rm = TRUE)/sum(H.prop3, na.rm = TRUE),
-            maxH4.prop = max(H.prop4, na.rm = TRUE),
-            centroidH4 = sum(julianweek * H.prop4, na.rm = TRUE)/sum(H.prop4, na.rm = TRUE),
+            maxH0.prop = max(H0.prop, na.rm = TRUE),
+            centroidH0 = sum(julianweek * H0.prop, na.rm = TRUE)/sum(H0.prop, na.rm = TRUE),
+            maxH1.prop = max(H1.prop, na.rm = TRUE),
+            centroidH1 = sum(julianweek * H1.prop, na.rm = TRUE)/sum(H1.prop, na.rm = TRUE),
+            maxH2.prop = max(H2.prop, na.rm = TRUE),
+            centroidH2 = sum(julianweek * H2.prop, na.rm = TRUE)/sum(H2.prop, na.rm = TRUE),
+            maxH3.prop = max(H3.prop, na.rm = TRUE),
+            centroidH3 = sum(julianweek * H3.prop, na.rm = TRUE)/sum(H3.prop, na.rm = TRUE),
+            maxH4.prop = max(H4.prop, na.rm = TRUE),
+            centroidH4 = sum(julianweek * H4.prop, na.rm = TRUE)/sum(H4.prop, na.rm = TRUE),
             maxcaterpillar_prop = max(caterpillar_prop, na.rm = TRUE),
             centroidcaterpillar_prop = sum(julianweek * caterpillar_prop, na.rm = TRUE)/sum(caterpillar_prop, na.rm = TRUE),
             maxcaterpillar_density = max(caterpillar_density, na.rm = TRUE),
@@ -517,15 +463,12 @@ HerbCatAnomaly_herbModel = left_join(HerbCatAnomaly,
 
 
 
-
 ###################################################################################################
 
 
 ## Correlate important variables----
 corrplot(cor(HerbCatAnomaly_herbModel %>%
-               select(maxHerb,
-                      # maxH0.prop, maxH2.prop, maxH3.prop, maxH4.prop, 
-                      effect, intercept, r2, centroidweek,
+               select(maxHerb, maxH0.prop, maxH2.prop, maxH3.prop, maxH4.prop, effect, intercept, r2, centroidweek,
                       centroidcaterpillar_density, centroidcaterpillar_prop, maxcaterpillar_density, maxcaterpillar_prop,
                       centroidweekAnomaly, centroidcaterpillar_propAnomaly)%>%
                mutate(across(everything(), ~ifelse(is.infinite(.), NA, .))),
@@ -549,8 +492,104 @@ ggplot(data = HerbCatAnomaly_herbModel,
     parse = TRUE
   )
 
+## Max total herb (%) ~ centroid Cat. density ----
+
+ggplot(data = HerbCatAnomaly_herbModel,
+       aes(x= centroidcaterpillar_density, y = maxHerb)) + geom_point()+
+  geom_smooth(method = "lm", se = TRUE, color = "red") +
+  stat_poly_eq(
+    formula = y ~ x,
+    aes(label = paste(
+      after_stat(eq.label),
+      after_stat(rr.label),
+      after_stat(p.value.label),
+      sep = "~~~"
+    )),
+    parse = TRUE
+  )
+
+ggplot(HerbCatAnomaly_herbModel,
+       aes(x = centroidcaterpillar_prop, y = maxHerb)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = TRUE, color = "red") +
+  stat_poly_eq(
+    formula = y ~ x,
+    aes(label = paste(
+      after_stat(eq.label),
+      after_stat(rr.label),
+      after_stat(p.value.label),
+      sep = "~~~"
+    )),
+    parse = TRUE
+  ) +theme_bw() + labs( y = "max total %Herb")
+
+summary(lme(
+  maxHerb ~ centroidcaterpillar_prop,
+  random = ~ 1 | siteObserv,
+  data = HerbCatAnomaly_herbModel,
+  method = "REML",
+  na.action = na.omit
+))
 
 
+
+
+
+# effect + intercept is the predicted value of the herbivory at the end of the julianWindow
+
+## predicted herbivory ~ centroid cat prop. occurence ----
+
+ggplot(data = HerbCatAnomaly_herbModel,
+       aes(x= centroidcaterpillar_prop, y = effect + intercept, colour = (100*(r2+ 0.001)),
+           weight = (100*(r2+ 0.001)))) + geom_point()+
+  geom_smooth(method = "lm", se = TRUE, color = "red") +
+  stat_poly_eq(
+    formula = y ~ x,
+    aes(label = paste(
+      after_stat(eq.label),
+      after_stat(rr.label),
+      after_stat(p.value.label),
+      sep = "~~~"
+    )),
+    parse = TRUE
+  ) +theme_bw() + labs( y = "Predicted total herbivory at end of julianWindow")
+
+
+
+ggplot(data = HerbCatAnomaly_herbModel,
+       aes(x= centroidcaterpillar_prop, y = effect, colour = (100*(r2+ 0.001)),
+           weight = (100*(r2+ 0.001)))) + geom_point()+
+  geom_smooth(method = "lm", se = TRUE, color = "red") +
+  stat_poly_eq(
+    formula = y ~ x,
+    aes(label = paste(
+      after_stat(eq.label),
+      after_stat(rr.label),
+      after_stat(p.value.label),
+      sep = "~~~"
+    )),
+    parse = TRUE
+  ) +theme_bw() + labs( y = "Herbivory rate")
+
+
+
+
+
+ggplot(data = HerbCatAnomaly_herbModel,
+       aes(x= maxcaterpillar_density, y = effect  + intercept, 
+           colour = (100*(r2+ 0.001)),
+           weight = (100*(r2+ 0.001)))) + geom_point()+
+  geom_smooth(method = "lm", se = TRUE, color = "red") +
+  stat_poly_eq(
+    formula = y ~ x,
+    aes(label = paste(
+      after_stat(eq.label),
+      after_stat(rr.label),
+      after_stat(p.value.label),
+      sep = "~~~"
+    )),
+    parse = TRUE
+  ) +theme_bw() + labs( y = "Predicted total herbivory at end of julianWindow")
 
 
 ggplot(data = HerbCatAnomaly_herbModel,
@@ -606,21 +645,16 @@ ggplot(data = HerbCatAnomaly_herbModel,
                         subtitle = "Slope Est: 0.42 in Random-intercept model")
 
 
-summary(lme(
+centroidHerbCat = lme(
   centroidweek ~ centroidcaterpillar_density,
   random = ~ 1 | siteObserv,
   data = HerbCatAnomaly_herbModel,
   method = "REML",
   na.action = na.omit
-))
+)
 
-r2(lme(
-  centroidweek ~ centroidcaterpillar_density,
-  random = ~ 1 | siteObserv,
-  data = HerbCatAnomaly_herbModel,
-  method = "REML",
-  na.action = na.omit
-))
+summary(centroidHerbCat)
+r2(centroidHerbCat)
 
 
 
@@ -673,28 +707,17 @@ ggplot(data = HerbCatAnomaly_herbModel,
       sep = "~~~"
     )),
     parse = TRUE
-  ) +theme_bw() + labs( y = "Centroid herbivory anomaly", 
-                        x= "Centroid anomaly for caterpillar density")
+  ) +theme_bw() + labs( y = "Centroid herbivory anomaly", x= "Centroid anomaly for caterpillar density")
 
 
 
-summary(
-  lme( # This is a random slope-only model (no random intercept!)
-    centroidweekAnomaly ~ centroidcaterpillar_densityAnomaly,
-    random = ~ 0 + centroidcaterpillar_densityAnomaly | siteObserv,
-    data = HerbCatAnomaly_herbModel,
-    method = "REML",
-    na.action = na.omit
-  )
-)
 
-r2(lme( # This is a random slope-only model (no random intercept!)
-  centroidweekAnomaly ~ centroidcaterpillar_densityAnomaly,
-  random = ~ 0 + centroidcaterpillar_densityAnomaly | siteObserv,
-  data = HerbCatAnomaly_herbModel,
-  method = "REML",
-  na.action = na.omit
-))
+
+
+
+
+
+
 
 
 
@@ -841,8 +864,7 @@ ggplot(data = HerbTempAnomaly,
       sep = "~~~"
     )),
     parse = TRUE
-  ) +theme_bw() + labs( y = "Centroid caterpillar proportion anomaly", 
-                        x= " Max.Temperature Anomaly")
+  ) +theme_bw() + labs( y = "Centroid caterpillar proportion anomaly", x= " Max.Temperature Anomaly")
 
 
 summary( # Theoretically, the intercept is supposed to be approximmately zero for all site 
@@ -855,7 +877,7 @@ summary( # Theoretically, the intercept is supposed to be approximmately zero fo
   )
 )
 
-AnomalTmax.CentroidProp =  lme( # This is a random slope-only model (no random intercept!)
+  AnomalTmax.CentroidProp =  lme( # This is a random slope-only model (no random intercept!)
   centroidcaterpillar_propAnomaly ~ AnomalTmax,
   random = ~ 0 + AnomalTmax | siteObserv,
   data = HerbTempAnomaly,
@@ -863,6 +885,12 @@ AnomalTmax.CentroidProp =  lme( # This is a random slope-only model (no random i
   na.action = na.omit
 )
 r2(AnomalTmax.CentroidProp) # same R2 as a fixed effect model.
+
+
+
+
+
+
 
 
 

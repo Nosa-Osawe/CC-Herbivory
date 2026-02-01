@@ -8,7 +8,7 @@ library(terra)
 library(sf)
 library(dplyr)
 library(purrr)
-
+library(viridis)
 
 # CC data ----
 options(timeout = 300)  
@@ -65,16 +65,6 @@ fullDatasetGreen = fullDataset %>%
   )
 
 
-
-fullDatasetGreen %>% 
-  filter(Name == "Acadia NP - Sundew") %>% 
-  group_by(Year, DOY_filled) %>% 
-  summarise(n())
-
-fullDataset %>% 
-  filter(Name == "Acadia NP - Sundew") %>% 
-  group_by(Year) %>% 
-  summarise(n())
 
 Herb1 = fullDatasetGreen %>% 
   filter(
@@ -360,7 +350,7 @@ herbModelOutput = modelGoodHerb %>%
 herbModelOutput.Lat = herbModelOutput %>% 
   separate(siteObserv, into = c("Name", "ObservationMethod"),
            sep = "_", remove = FALSE ) %>% 
-  left_join(fullDataset %>% select(Name, Latitude, Longitude) %>% 
+  left_join(fullDatasetGreen %>% select(Name, Latitude, Longitude) %>% 
               group_by(Name) %>% 
               summarise(Latitude = mean(Latitude),
                         Longitude = mean(Longitude)),
@@ -398,4 +388,18 @@ ggplot(herbModelOutput.Lat, aes(x = Latitude, y = effect,
 
 
 
+
+ggplot(goodHerbData2_collapsed, aes(
+  x = julianweek,
+  y = totalHerbS,
+  group = Year,
+  color = factor(Year)
+)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  facet_wrap(~ siteObserv, scales = "free_y") +
+  scale_color_viridis_d(option = "C") +
+  labs(color = "Year") +
+  theme_bw() +
+  theme(legend.position = "bottom")
 
