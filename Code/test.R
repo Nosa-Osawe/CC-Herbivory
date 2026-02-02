@@ -79,7 +79,7 @@ TempDayWindow = 120: 230   # Temperature window
 
 
 site = get_site( "All", fullDataset)
-genusPlant = get_genera(plantGenus = "Acer", fullDataset = fullDataset) # for now, this works well for one plantGenus ONLY.
+genusPlant = get_genera(plantGenus = "Fagus", fullDataset = fullDataset) # for now, this works well for one plantGenus ONLY.
 
 fullDataset2 = fullDataset %>% 
   filter(
@@ -864,5 +864,70 @@ AnomalTmax.CentroidProp =  lme( # This is a random slope-only model (no random i
 )
 r2(AnomalTmax.CentroidProp) # same R2 as a fixed effect model.
 
+
+####################################################################################################################
+
+
+
+library(ggh4x)
+
+fullDataset %>% 
+  filter(Year >= 2017) %>% 
+  group_by(Name, ObservationMethod) %>% 
+  summarise(nYear = n_distinct(Year), .groups = "drop") %>% 
+  arrange(desc(nYear)) %>% 
+  slice_head(n = 100) %>% 
+  inner_join(
+    fullDataset %>% 
+      filter(Year >= 2017) %>% 
+      group_by(Name, ObservationMethod) %>% 
+      summarise(nSurv = n_distinct(ID), .groups = "drop") %>% 
+      arrange(desc(nSurv)) %>% 
+      slice_head(n = 100),
+    
+    by = c("Name", "ObservationMethod")
+  ) %>% 
+  inner_join(
+    fullDataset %>% 
+      filter(Year >= 2017) %>% 
+      filter(!is.na(julianday)) %>% 
+      mutate(
+        julianMonth = case_when(
+          julianday <= 30  ~ "Jan",
+          julianday <= 60  ~ "Feb",
+          julianday <= 90  ~ "Mar",
+          julianday <= 120 ~ "Apr",
+          julianday <= 150 ~ "May",
+          julianday <= 180 ~ "Jun",
+          julianday <= 210 ~ "Jul",
+          julianday <= 240 ~ "Aug",
+          julianday <= 270 ~ "Sep",
+          julianday <= 300 ~ "Oct",
+          julianday <= 330 ~ "Nov",
+          julianday <= 366 ~ "Dec"
+        )
+      ),
+    by = c("Name", "ObservationMethod")
+  ) %>% 
+  group_by(Name, Year, julianMonth) %>% 
+  summarise(nSurv = n_distinct(ID), .groups = "drop") %>% 
+  mutate(
+    Name = factor(Name, levels = rev(sort(unique(Name)))),
+    julianMonth = factor(julianMonth, levels = month.abb)
+  ) %>% 
+  ggplot(aes(x = julianMonth,
+             y = Name,
+             fill = nSurv)) +
+  geom_tile(color = "white") +
+  facet_grid(. ~ Year,
+            # scales = "free_x", 
+             space = "free_x") +
+  scale_fill_viridis_c(name = "Survey intensity") +
+  labs(x = " ", y = " ") +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 90, vjust = 0.5),
+    panel.spacing.x = unit(0, "lines")
+  )
 
 
